@@ -284,7 +284,30 @@ def art_image(rows, alph=LUNA_ALPH, colors=LUNA_COLORS):
     return img
 
 
-CRANE_FILE = os.path.join(pt.APP_DIR, "assets", "crane.png")  # автомат Kirby Crane Fever, 130×215
+ASSETS = os.path.join(pt.APP_DIR, "assets")
+CRANE_FILE = os.path.join(ASSETS, "crane.png")  # автомат Kirby Crane Fever, 130×215
+
+# Hello Kitty — портрет 100×120 в левой нижней панели (точная копия кадра из картинки)
+KITTY_AT = (22, 272)
+KITTY_EYES = [(36, 56), (38, 56), (35, 57), (36, 57), (38, 57), (39, 57), (36, 58), (37, 58), (38, 58), (39, 58),
+              (36, 59), (37, 59), (38, 59), (39, 59), (35, 60), (36, 60), (37, 60), (39, 60), (36, 61), (38, 61),
+              (64, 53), (65, 53), (66, 53), (65, 54), (66, 54), (63, 55), (64, 55), (65, 55), (66, 55), (67, 55),
+              (63, 56), (64, 56), (65, 56), (66, 56), (67, 56), (64, 57), (65, 57), (67, 57), (64, 58), (65, 58),
+              (66, 58)]
+KITTY_LIDS = [(35, 59, 40, 60), (63, 56, 68, 57)]  # закрытые глазки — тонкие чёрточки
+KITTY_SPARKS = [(11, 25), (89, 34)]
+
+# Синнаморол — круглый пузырь (радиус 40) с облачком, пролетает по экрану
+CINNA_R = 40
+CINNA_EYES = [(32, 29), (33, 29), (32, 30), (33, 30), (34, 30), (31, 31), (32, 31), (33, 31), (34, 31), (31, 32),
+              (32, 32), (33, 32), (34, 32), (51, 27), (52, 27), (51, 28), (52, 28), (53, 28), (50, 29), (51, 29),
+              (52, 29), (53, 29), (50, 30), (51, 30), (52, 30), (53, 30)]
+CINNA_LIDS = [(31, 31, 35, 32), (50, 29, 54, 30)]
+CINNA_RING = [(round(math.cos(a / 64 * math.tau) * (CINNA_R + 2)), round(math.sin(a / 64 * math.tau) * (CINNA_R + 2)),
+               tq.RAINBOW[a * len(tq.RAINBOW) // 64]) for a in range(64)]
+
+# Сейлор Мун — появляется в стакане, когда сессия завершена или новый уровень
+SAILOR_FRAMES = 64  # ≈ 5 секунд
 CRANE_AT = (175, 62)  # левый верхний угол картинки в стакане
 CRANE_STARS = [(32, 172), (45, 170), (57, 175), (74, 180), (95, 172), (109, 171), (16, 186), (113, 40)]
 
@@ -343,6 +366,14 @@ class AppMoon(tq.App2):
             self.crane = tk.PhotoImage(file=CRANE_FILE)
         except tk.TclError:
             self.crane = None  # без картинки на паузе остаётся сияющее сердце
+        self.kitty = self.load_asset("kitty.png")
+        self.cinna_img = self.load_asset("cinna.png")
+        self.sailor = self.load_asset("sailor.png")
+        if self.sailor:
+            self.sailor_part = tk.PhotoImage(width=self.sailor.width(), height=self.sailor.height())
+        self.cinna = None
+        self.sailor_show = None
+        self.kitty_love = -1
         self.rider = None
 
         self.load()
@@ -567,20 +598,20 @@ class AppMoon(tq.App2):
         if lv > self.last_lv and running:
             self.burst("sparkle", 240, 200, 18)
             self.show_toast(f"LEVEL UP! ★ LV {lv}", 40)
+            self.sailor_show = f
         self.last_lv = lv
         self.ptext(f"LV {lv:02d}", cx, 226, 2, M["lilac"], anchor="center", shadow=M["ink"])
         filled = int(xp * 5)
         for i in range(5):
             on = i < filled or (i == filled and running and (f // 4) % 2)
             self.sprite(HEART, 36 + i * 18, 256, 2, color=None if on else M["line"], pal=P3)
-        # пудреница с крыльями
-        bob = math.sin(f * (0.2 if running else 0.08)) * 3
-        self.msprite(WING, 38, 336 + bob, 2.5, flip=True)
-        self.msprite(WING, 106, 336 + bob, 2.5)
-        self.msprite(COMPACT, cx, 356 + bob, 3)
-        if running and f % 10 == 0:
-            self.particles.append({"kind": "sparkle", "x": cx + random.uniform(-30, 30), "y": 300,
-                                   "vx": 0, "vy": -0.6, "life": 14, "gravity": False})
+        if self.kitty:
+            self.draw_kitty(running, f)
+        else:  # без картинки — прежняя крылатая пудреница
+            bob = math.sin(f * (0.2 if running else 0.08)) * 3
+            self.msprite(WING, 38, 336 + bob, 2.5, flip=True)
+            self.msprite(WING, 106, 336 + bob, 2.5)
+            self.msprite(COMPACT, cx, 356 + bob, 3)
 
         rx = sum(PANEL_R) / 2
         self.draw_next(rx)
@@ -602,6 +633,7 @@ class AppMoon(tq.App2):
         self.draw_messenger(running, f, today)
         self.draw_particles()
         self.draw_rider(running, f)
+        self.draw_cinna(running, f)
         if self.toast and self.toast[1] >= f:
             tw = max(220, len(self.toast[0]) * 8 + 40)
             x1, x2 = W / 2 - tw / 2, W / 2 + tw / 2
@@ -699,6 +731,100 @@ class AppMoon(tq.App2):
         if x > W + 90:
             self.rider = None
 
+    def load_asset(self, name):
+        try:
+            return tk.PhotoImage(file=os.path.join(ASSETS, name))
+        except tk.TclError:
+            return None
+
+    def stop(self):
+        was_running = bool(self.data["running"])
+        super().stop()
+        if was_running:
+            self.sailor_show = self.f  # сессия завершена — появляется Сейлор Мун
+
+    def love_kitty(self):
+        """Клик по Hello Kitty — вокруг неё взлетают сердечки."""
+        self.kitty_love = self.f + 30
+        self.burst("heart", KITTY_AT[0] + 50, KITTY_AT[1] + 60, 6)
+
+    def draw_kitty(self, running, f):
+        x0, y0 = KITTY_AT
+        self.cv.create_image(x0, y0, image=self.kitty, anchor="nw", tags=self.layer)
+        # моргает раз в несколько секунд (и жмурится, когда её любят)
+        if f % 47 in (0, 1, 2) or f < self.kitty_love:
+            for i, j in KITTY_EYES:
+                self.rect(x0 + i, y0 + j, x0 + i + 1, y0 + j + 1, "#f7ede3")
+            for a, b, c, d in KITTY_LIDS:
+                self.rect(x0 + a, y0 + b, x0 + c, y0 + d, "#3b2622")
+        for k, (sx, sy) in enumerate(KITTY_SPARKS):  # искорки на листьях мерцают
+            if (f // 3 + k * 9) % 18 < 4:
+                self.msprite(SPARKLE, x0 + sx, y0 + sy + 3, 2)
+        if f < self.kitty_love and f % 4 == 0:
+            self.particles.append({"kind": "float", "x": x0 + random.uniform(20, 80), "y": y0 + 40,
+                                   "vx": 0, "vy": -1.2, "life": 28, "gravity": False, "ph": random.uniform(0, 6)})
+        self.hits.append((x0, y0, x0 + 100, y0 + 120, self.love_kitty))
+
+    def launch_cinna(self):
+        if self.cinna is None and self.cinna_img and self.data["fx"]:
+            self.cinna = {"x": W + 50.0, "base": random.choice((150, 330)), "hearts": -1}
+
+    def poke_cinna(self):
+        if self.cinna:
+            self.cinna["hearts"] = self.f + 16
+            self.burst("heart", self.cinna["x"], self.cinna["base"], 10)
+
+    def draw_cinna(self, running, f):
+        """Синнаморол в пузыре: пролетает справа налево, покачиваясь и моргая."""
+        if self.cinna is None:
+            if f % RIDER_EVERY == 0:
+                self.launch_cinna()
+            return
+        c = self.cinna
+        c["x"] -= 2.4 * (1.3 if running else 1)
+        x, y = c["x"], c["base"] + math.sin(f * 0.12) * 10
+        x0, y0 = x - CINNA_R, y - CINNA_R
+        self.cv.create_image(x0, y0, image=self.cinna_img, anchor="nw", tags=self.layer)
+        if f % 50 in (0, 1, 2) or f < c["hearts"]:
+            for i, j in CINNA_EYES:
+                self.rect(x0 + i, y0 + j, x0 + i + 1, y0 + j + 1, "#cbd3f7")
+            for a, b, cc, d in CINNA_LIDS:
+                self.rect(x0 + a, y0 + b, x0 + cc, y0 + d, "#3b4fb5")
+        for dx, dy, col in CINNA_RING:  # радужная плёнка пузыря
+            self.rect(x + dx - 1, y + dy - 1, x + dx + 1, y + dy + 1, col)
+        for k in range(5):  # блик
+            self.rect(x - 26 + k * 3, y - 30 + k * 2 - (k * k) // 2, x - 23 + k * 3, y - 28 + k * 2 - (k * k) // 2,
+                      M["white"])
+        if f % 6 == 0:
+            self.particles.append({"kind": "sparkle", "x": x + CINNA_R + 4, "y": y + random.uniform(-20, 20),
+                                   "vx": 0.6, "vy": 0, "life": 10, "gravity": False})
+        self.hits.append((x - CINNA_R, y - CINNA_R, x + CINNA_R, y + CINNA_R, self.poke_cinna))
+        if x < -60:
+            self.cinna = None
+
+    def draw_sailor(self, f):
+        """Сейлор Мун поднимается в стакане на фоне луны, стоит в позе и уходит обратно."""
+        k = f - self.sailor_show
+        if k >= SAILOR_FRAMES:
+            self.sailor_show = None
+            return
+        w, h = self.sailor.width(), self.sailor.height()
+        vis = h if 10 <= k < SAILOR_FRAMES - 10 else int(h * (k / 10 if k < 10 else (SAILOR_FRAMES - k) / 10))
+        x0, bottom = 240 - w / 2, WELL_Y + 17 * CELL - 2
+        glow = min(1, k / 10, (SAILOR_FRAMES - k) / 10)
+        for i, j in moon_cells(11, 6):  # большая луна за спиной, как на картинке
+            self.rect(166 + i * 6, 120 + j * 6, 172 + i * 6, 126 + j * 6, mix("#f6f1d8", M["well"], 1 - glow))
+        if vis > 0:
+            self.sailor_part.blank()
+            self.sailor_part.tk.call(self.sailor_part, "copy", self.sailor, "-from", 0, h - vis, w, h,
+                                     "-to", 0, h - vis)
+            bob = round(math.sin(k * 0.3)) if 10 <= k < SAILOR_FRAMES - 10 else 0
+            self.cv.create_image(x0, bottom - h + bob, image=self.sailor_part, anchor="nw", tags=self.layer)
+        if k % 3 == 0:
+            self.particles.append({"kind": "sparkle", "x": 240 + random.uniform(-90, 90),
+                                   "y": bottom - random.uniform(20, h), "vx": 0, "vy": -0.4, "life": 12,
+                                   "gravity": False})
+
     def pet_kitty(self):
         """Пасхалка: погладить кошечку."""
         self.purr_until = self.f + PURR_FRAMES
@@ -734,7 +860,9 @@ class AppMoon(tq.App2):
                 if p["y"] + cy >= 0:
                     self.block(WELL_X + (p["x"] + cx) * CELL, WELL_Y + (p["y"] + cy) * CELL,
                                PIECE_COLORS[p["kind"]])
-        if not running and self.crane:
+        if self.sailor and self.sailor_show is not None:
+            self.draw_sailor(f)
+        elif not running and self.crane:
             # на паузе в стакане стоит автомат Kirby Crane Fever, звёздочки мерцают
             x0, y0 = CRANE_AT
             w, h = self.crane.width(), self.crane.height()
