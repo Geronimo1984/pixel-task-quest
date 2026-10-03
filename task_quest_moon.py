@@ -14,7 +14,7 @@ import tkinter as tk
 from tkinter import font as tkfont
 
 import pixel_tracker as pt
-from moon_art import LUNA_ALPH, LUNA_BODY, LUNA_COLORS, LUNA_TAIL, LUNA_TAIL_AT
+from moon_art import LUNA_ALPH, LUNA_BLINK, LUNA_BLINK_AT, LUNA_BODY, LUNA_COLORS, LUNA_TAIL, LUNA_TAIL_AT
 import task_quest_2000 as tq
 from pixel_tracker import HEART, SPARKLE, STAR, fmt_hms, lighten, mix, moon_cells
 
@@ -335,7 +335,10 @@ class AppMoon(tq.App2):
         self.idle_since = time.time()
         self.stack = HeartStack()
         self.purr_until = -1
-        self.luna_body, self.luna_tail = art_image(LUNA_BODY), art_image(LUNA_TAIL)
+        self.luna_body, self.luna_blink = art_image(LUNA_BODY), art_image(LUNA_BLINK)
+        # хвост по рядам: каждый ряд сдвигается отдельно, чтобы хвост изгибался, а не съезжал целиком
+        self.luna_tail = [(r, len(row) - len(row.lstrip(".")), art_image([row.strip(".")]))
+                          for r, row in enumerate(LUNA_TAIL) if row.strip(".")]
         try:
             self.crane = tk.PhotoImage(file=CRANE_FILE)
         except tk.TclError:
@@ -608,15 +611,32 @@ class AppMoon(tq.App2):
             self.uitext(W / 2, 220, self.toast[0], M["xp_text"], 12, True, anchor="center")
 
     def draw_luna(self, rx, running, f):
-        """Чёрная кошка: дышит, покачивает хвостом, мурлычет по клику."""
+        """Чёрная кошка: машет хвостом, моргает, дремлет на паузе, мурлычет по клику."""
         purring = f < self.purr_until
+        lively = running or purring
         dx = (1 if f % 2 else -1) if purring else 0
         dy = -1 if (running and (f // 10) % 2) else 0
-        wag = round(math.sin(f * (0.35 if running or purring else 0.12)) * (2 if running or purring else 1))
         x0, y0 = rx - len(LUNA_BODY[0]) / 2 + dx, LUNA_TOP + dy
-        self.cv.create_image(x0 + LUNA_TAIL_AT[0] + wag, y0 + LUNA_TAIL_AT[1], image=self.luna_tail,
-                             anchor="nw", tags=self.layer)
+        # хвост изгибается: кончик качается сильнее всего, основание неподвижно
+        amp = 3 if lively else 1.5
+        phase = f * (0.3 if lively else 0.1)
+        last = len(LUNA_TAIL) - 1
+        for r, lead, img in self.luna_tail:
+            k = ((last - r) / last) ** 1.5
+            off = round(math.sin(phase - k * 1.2) * amp * k)
+            self.cv.create_image(x0 + LUNA_TAIL_AT[0] + lead + off, y0 + LUNA_TAIL_AT[1] + r, image=img,
+                                 anchor="nw", tags=self.layer)
         self.cv.create_image(x0, y0, image=self.luna_body, anchor="nw", tags=self.layer)
+        # глаз: во время работы иногда моргает, на паузе дремлет и изредка открывает глаз
+        if purring:
+            closed = True
+        elif running:
+            closed = f % 55 in (0, 1, 2)
+        else:
+            closed = not (60 <= f % 130 < 84)
+        if closed:
+            self.cv.create_image(x0 + LUNA_BLINK_AT[0], y0 + LUNA_BLINK_AT[1], image=self.luna_blink,
+                                 anchor="nw", tags=self.layer)
         if purring:  # пасхалка: мурлычет, вокруг парят сердечки
             if f % 4 == 0:
                 self.particles.append({"kind": "float", "x": rx + random.uniform(-40, 30), "y": 280,
