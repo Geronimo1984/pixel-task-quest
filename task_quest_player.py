@@ -23,6 +23,7 @@ import task_quest_2000 as tq
 from pixel_tracker import fmt_hms
 
 W, H = 480, 740
+TILE = 160
 ASSETS = os.path.join(pt.APP_DIR, "assets")
 FOCUS_SEC = 25 * 60
 DAY_GOAL_SEC = 8 * 3600
@@ -117,6 +118,17 @@ class AppPlayer(tq.App2):
         self.eq = [0.2] * 14
 
         self.bg = tk.PhotoImage(file=os.path.join(ASSETS, "player_shape.png"))
+        # фон режем на плитки 160×160: большие картинки с прозрачностью Tk выводит по частям,
+        # и на прозрачном окне macOS они не показываются; маленькие (как диски) — показываются
+        self.bg_tiles = []
+        for ty in range(0, H, TILE):
+            for tx in range(0, W, TILE):
+                w, h = min(TILE, W - tx), min(TILE, H - ty)
+                if all(self.bg.transparency_get(tx + i, ty + j) for j in range(0, h, 4) for i in range(0, w, 4)):
+                    continue  # плитка целиком из прозрачного фона — не нужна
+                tile = tk.PhotoImage(width=w, height=h)
+                tile.tk.call(tile, "copy", self.bg, "-from", tx, ty, tx + w, ty + h)
+                self.bg_tiles.append((tx, ty, tile))
         self.hint = None
         bold = next((f for f in ("Verdana", "Tahoma", "Arial") if f in families), fam)
         self.bold = lambda size: (bold, size, "bold")
@@ -146,8 +158,8 @@ class AppPlayer(tq.App2):
         self.data.setdefault("disc", 0)
         self.last_lv = self.level()[0]
 
-        # фон плеера рисуется в каждом кадре (см. redraw): на прозрачном окне без рамки macOS
-        # теряет картинку, нарисованную один раз до того, как окно появилось на экране
+        for tx, ty, tile in self.bg_tiles:   # фон плеера — один раз, под всем остальным
+            self.cv.create_image(tx, ty, image=tile, anchor="nw", tags="static")
 
         self.cv.bind("<Button-1>", self.on_click)
         self.cv.bind("<B1-Motion>", self.on_drag)
@@ -291,7 +303,6 @@ class AppPlayer(tq.App2):
     def redraw(self):
         self.cv.delete("dyn")
         self.hits = []
-        self.cv.create_image(0, 0, image=self.bg, anchor="nw", tags=self.layer)
         running = self.data["running"]
         f = self.f
         sel = self.task(self.data["selected"])
