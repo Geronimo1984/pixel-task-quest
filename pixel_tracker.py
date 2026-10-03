@@ -873,7 +873,10 @@ class App:
         else:
             self.button("main", 130, 342, 350, 394, "▶  СТАРТ", C["mint"], self.toggle, 18)
 
-        self.text(W / 2, 414, f"сегодня: {fmt_hms(self.today_total())}", C["yellow"], 12)
+        # общее время за день по всем квестам
+        self.rect(120, 402, 360, 426, C["ink"], C["mint"] if running else C["yellow"], 2)
+        self.text(134, 414, "ЗА ДЕНЬ", C["pink"], 11, anchor="w", shadow=None)
+        self.pixel_text(fmt_hms(self.today_total()), 290, 407, 2, C["mint"] if running else C["yellow"])
 
         # ── добавление ──
         self.button("add", 388, 430, 454, 468, "+", C["yellow"], lambda: (self.press("add"), self.add_task()), 20)
@@ -922,9 +925,10 @@ class App:
         widths = [3 if ch in ": " else 5 for ch in s]
         total = sum(w * scale for w in widths) + (len(s) - 1) * scale
         x = cx - total / 2
+        shadow = max(2, round(scale * 0.67))
         for ch, w in zip(s, widths):
             if ch != " ":
-                for dx, col in ((4, C["ink"]), (0, color)):
+                for dx, col in ((shadow, C["ink"]), (0, color)):
                     for j, row in enumerate(DIGITS[ch]):
                         for i, px in enumerate(row):
                             if px == "#":
