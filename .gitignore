@@ -1,0 +1,8 @@
+# личные данные трекера
+tracker_data.json
+tracker_data.json.*
+# собирается локально через build_app.py
+*.app
+*.iconset
+__pycache__/
+.DS_Store
