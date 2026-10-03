@@ -95,6 +95,23 @@ GHOST = [
 ]
 GHOST_SLEEP = GHOST[:4] + ["..KWWWWWWWWWWK..", "..KWKKKWWKKKWK.."] + GHOST[6:]
 GHOST_PRESS = GHOST[:11] + ["KWKYYYDDDDWDCKWK"] + GHOST[12:]
+# пасхалка: испуганный призрак — глаза-блюдца, рот «О», джойстик выронил
+GHOST_SCARED = GHOST[:3] + [
+    "..KWKKKWWKKKWK..",
+    "..KWKWKWWKWKWK..",
+    "..KWKKKWWKKKWK..",
+    ".KWWWWWKKWWWWWK.",
+    ".KWWWWKWWKWWWWK.",
+    ".KWWWWWKKWWWWWK.",
+] + ["KWWWWWWWWWWWWWWK"] * 5 + GHOST[14:]
+PAD = [
+    ".KKKKKKKKKK.",
+    "KDYDDDDDDRDK",
+    "KYYYDDDDRDCK",
+    "KDYDDDDDDGDK",
+    ".KKKKKKKKKK.",
+]
+GHOST_AWAY_SEC = 15
 
 FISH = [
     "....KKKK......",
@@ -325,6 +342,7 @@ class App2(pt.App):
         self.toast = None
         self.topmost = False
         self.idle_since = time.time()
+        self.ghost_state = None  # None | ("scared", кадр) | ("gone", до какого времени) | ("back", кадр)
         self.clouds = [[330, 128, 0.3], [430, 150, 0.2], [520, 120, 0.25]]
         self.fish = []
         self.bubbles = [self.new_bubble(random.uniform(ROOM[1], ROOM[3])) for _ in range(7)]
@@ -397,7 +415,7 @@ class App2(pt.App):
     def update_particles(self):
         super().update_particles()
         for p in self.particles:
-            if p["kind"] in ("steam", "note"):
+            if p["kind"] in ("steam", "note", "float"):
                 p["vx"] = math.sin(p["life"] / 3 + p.get("ph", 0)) * 0.5
 
     # ── примитивы рисования (с поддержкой статичного слоя и обрезки) ───────
@@ -753,14 +771,7 @@ class App2(pt.App):
                 self.ptext("NO SIGNAL", (a + c) / 2, b + 21, 1, N["white"], anchor="center")
 
         # призрак на диване
-        gx, gb = 362, 262
-        if running:
-            frame = GHOST_SLEEP if f % 50 in (0, 1) else (GHOST_PRESS if (f // 3) % 2 else GHOST)
-            self.sprite(frame, gx, gb + math.sin(f * 0.3) * 3, 3.5)
-        else:
-            self.sprite(GHOST_SLEEP, gx, gb + math.sin(f * 0.1) * 2, 3.5)
-            if f % 24 == 0:
-                self.particles.append({"kind": "z", "x": gx + 30, "y": gb - 60, "vx": 0, "vy": -0.9, "life": 34})
+        self.draw_ghost(running, f, 362, 262)
 
         # пар над кружкой
         if f % 6 == 0:
@@ -809,6 +820,71 @@ class App2(pt.App):
                 self.rect(p["x"], p["y"], p["x"] + s, p["y"] + s, mix("#ffffff", "#4a2b4c", 1 - p["life"] / 22))
             elif k == "note":
                 self.text(p["x"], p["y"], "♪", N["pink"] if p["life"] % 8 < 4 else N["cyan"], 13)
+            elif k == "drop":
+                self.rect(p["x"], p["y"], p["x"] + 3, p["y"] + 5, "#8fd8ff")
+            elif k == "puff":
+                s = 4 + (20 - p["life"]) * 0.6
+                self.rect(p["x"] - s / 2, p["y"] - s / 2, p["x"] + s / 2, p["y"] + s / 2,
+                          mix("#ffffff", "#4a2b4c", (20 - p["life"]) / 20))
+
+    def scare_ghost(self):
+        """Пасхалка: призрак пугается от клика и исчезает на 15 секунд."""
+        if self.ghost_state is None:
+            self.ghost_state = ("scared", self.f)
+            for dx in (-26, -18, 18, 26):
+                self.particles.append({"kind": "drop", "x": 362 + dx, "y": 214, "vx": dx / 30, "vy": -1.5,
+                                       "life": 16})
+
+    def dissolve(self, rows, cx, bottom, s, keep):
+        """Рисует спрайт «рассыпанным»: видна только доля клеток keep (0…1)."""
+        w, h = len(rows[0]), len(rows)
+        x0, y0 = cx - w * s / 2, bottom - h * s
+        for j, row in enumerate(rows):
+            for i, ch in enumerate(row):
+                if ch != "." and ((i * 7 + j * 13) % 17) / 17 < keep:
+                    self.rect(round(x0 + i * s), round(y0 + j * s), round(x0 + (i + 1) * s),
+                              round(y0 + (j + 1) * s), P2[ch])
+
+    def draw_ghost(self, running, f, gx, gb):
+        st = self.ghost_state
+        if st and st[0] == "gone":
+            self.sprite(PAD, gx, gb, 3)  # брошенный джойстик на диване
+            if time.time() >= st[1]:
+                self.ghost_state = ("back", f)
+                self.burst("sparkle", gx, gb - 30, 12)
+            return
+        if st and st[0] == "scared":
+            k = f - st[1]
+            self.sprite(PAD, gx, gb, 3)
+            if k < 12:  # вздрогнул, подпрыгнул, «!»
+                self.sprite(GHOST_SCARED, gx + (3 if k % 2 else -3), gb - min(k, 6) * 2, 3.5)
+                if (k // 2) % 2 == 0:
+                    self.ptext("!", gx + 34, gb - 80, 4, N["yellow"], shadow=N["red"])
+            elif k < 24:  # растворяется в воздухе
+                self.dissolve(GHOST_SCARED, gx, gb - 12 - (k - 12) * 3, 3.5, 1 - (k - 12) / 12)
+                if k == 22:
+                    for _ in range(8):
+                        a = random.uniform(0, math.tau)
+                        self.particles.append({"kind": "puff", "x": gx + math.cos(a) * 14,
+                                               "y": gb - 60 + math.sin(a) * 14, "vx": math.cos(a) * 1.2,
+                                               "vy": math.sin(a) * 1.2 - 0.5, "life": 20})
+            else:
+                self.ghost_state = ("gone", time.time() + GHOST_AWAY_SEC)
+            return
+        if st and st[0] == "back":
+            k = f - st[1]
+            if k < 12:  # проявляется обратно
+                self.dissolve(GHOST if running else GHOST_SLEEP, gx, gb, 3.5, (k + 1) / 12)
+                return
+            self.ghost_state = None
+        if running:
+            frame = GHOST_SLEEP if f % 50 in (0, 1) else (GHOST_PRESS if (f // 3) % 2 else GHOST)
+            self.sprite(frame, gx, gb + math.sin(f * 0.3) * 3, 3.5)
+        else:
+            self.sprite(GHOST_SLEEP, gx, gb + math.sin(f * 0.1) * 2, 3.5)
+            if f % 24 == 0:
+                self.particles.append({"kind": "z", "x": gx + 30, "y": gb - 60, "vx": 0, "vy": -0.9, "life": 34})
+        self.hits.append((gx - 28, gb - 58, gx + 28, gb, self.scare_ghost))
 
     def draw_list(self, running, f):
         tasks = self.data["tasks"]
@@ -860,6 +936,10 @@ class App2(pt.App):
         self.ptext(f"{int(xp * 25):02d}/25", 274, 768, 2, N["white"], shadow=N["ink"])
         self.ptext("MIN", 352, 775, 1, N["violet"])
         self.bar(274, 788, 392, 800, xp, N["red"])
+        if self.ghost_state and self.ghost_state[0] in ("scared", "gone"):
+            if (f // 6) % 2:
+                self.ptext("?", 429, 752, 5, N["violet"], anchor="center", shadow=N["ink"])
+            return
         frame = GHOST if running else (GHOST_SLEEP if (f // 30) % 3 == 0 else GHOST)
         self.sprite(frame, 429, 799 + (math.sin(f * 0.3) * 2 if running else 0), 3)
 

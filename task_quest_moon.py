@@ -81,6 +81,8 @@ KITTY = [
     "...KKK.KK.KKKK..",
 ]
 KITTY_SLEEP = KITTY[:7] + ["KLLLLLLLLLLLLLLK", "KLKKKLLLLLKKKLLK"] + KITTY[9:]
+KITTY_HAPPY = KITTY[:7] + ["KLLLKLLLLLLKLLLK", "KLLKLKLLLLKLKLLK"] + KITTY[9:]  # глазки «^ ^»
+PURR_FRAMES = 45  # ≈ 3.5 секунды мурчания
 
 # волшебная пудреница с сердцем
 COMPACT = [
@@ -285,6 +287,7 @@ class AppMoon(tq.App2):
         self.topmost = False
         self.idle_since = time.time()
         self.stack = HeartStack()
+        self.purr_until = -1
 
         self.load()
         self.data.setdefault("fx", True)
@@ -532,10 +535,21 @@ class AppMoon(tq.App2):
         else:
             self.ptext("PAUSE", rx, 204, 3, M["pink"], anchor="center", shadow=M["ink"])
             self.ptext("ZZZ", rx, 236, 2, M["line"], anchor="center")
-        kitty = KITTY_SLEEP if not running or f % 45 in (0, 1) else KITTY
-        self.msprite(kitty, rx, 388 + (math.sin(f * 0.3) * 2 if running else 0), 3.5)
-        if not running and f % 26 == 0:
-            self.particles.append({"kind": "z", "x": rx + 22, "y": 300, "vx": 0, "vy": -0.7, "life": 30})
+        if f < self.purr_until:  # пасхалка: мурлычет, жмурится, вокруг парят сердечки
+            self.msprite(KITTY_HAPPY, rx + (1 if f % 2 else -1), 388, 3.5)
+            if f % 4 == 0:
+                self.particles.append({"kind": "float", "x": rx + random.uniform(-24, 24), "y": 330,
+                                       "vx": 0, "vy": -1.3, "life": 32, "gravity": False,
+                                       "ph": random.uniform(0, 6)})
+            if f % 15 == 0:
+                self.particles.append({"kind": "purr", "x": rx + random.choice((-20, 20)), "y": 318,
+                                       "vx": 0, "vy": -0.8, "life": 22, "gravity": False})
+        else:
+            kitty = KITTY_SLEEP if not running or f % 45 in (0, 1) else KITTY
+            self.msprite(kitty, rx, 388 + (math.sin(f * 0.3) * 2 if running else 0), 3.5)
+            if not running and f % 26 == 0:
+                self.particles.append({"kind": "z", "x": rx + 22, "y": 300, "vx": 0, "vy": -0.7, "life": 30})
+        self.hits.append((rx - 30, 322, rx + 30, 392, self.pet_kitty))
 
         self.draw_well(running, f)
 
@@ -555,6 +569,10 @@ class AppMoon(tq.App2):
             self.xp_titlebar(x1, 180, x2, 200, "Quest Messenger", buttons=False)
             self.rect(x1, 200, x2, 240, M["xp_body"])
             self.uitext(W / 2, 220, self.toast[0], M["xp_text"], 12, True, anchor="center")
+
+    def pet_kitty(self):
+        """Пасхалка: погладить кошечку."""
+        self.purr_until = self.f + PURR_FRAMES
 
     def draw_next(self, rx):
         for n, kind in enumerate(self.stack.queue[:2]):
@@ -694,6 +712,10 @@ class AppMoon(tq.App2):
                 self.ptext("Z", p["x"], p["y"], 1 if p["life"] > 18 else 2, M["lilac"])
             elif k == "text":
                 self.ptext(p["text"], p["x"], p["y"], 2, M["mint"], anchor="center", shadow=M["ink"])
+            elif k == "float":
+                self.msprite(HEART, p["x"], p["y"], 2 if p["life"] > 8 else 1.5)
+            elif k == "purr":
+                self.text(p["x"], p["y"], "мрр~", M["pink"] if p["life"] % 6 < 3 else M["lilac"], 11)
 
 
 def main():
