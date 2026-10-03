@@ -157,6 +157,9 @@ class AppPlayer(tq.App2):
         with open(os.path.join(ASSETS, "player_silhouette.json"), encoding="utf-8") as fh:
             for x1, y1, x2, y2 in json.load(fh):
                 self.cv.create_rectangle(x1, y1, x2, y2, fill="#000000", outline="", tags="static")
+        for tx, ty, tile in self.bg_tiles:   # картинка плеера поверх силуэта — один раз
+            self.cv.create_image(tx, ty, image=tile, anchor="nw", tags="static")
+        self.keys, self.sec_hits = {}, {}
 
         self.load()
         self.data.setdefault("fx", True)
@@ -304,12 +307,25 @@ class AppPlayer(tq.App2):
         font = self.fit(text, size, x2 - x1 - 6, rounded)
         self.cv.create_text((x1 + x2) / 2, (y1 + y2) / 2, text=text, fill=color, font=font, tags=self.layer)
 
+    # части интерфейса снизу вверх; каждая перерисовывается, только когда изменилось её содержимое
+    ORDER = ("arc", "eq", "lcd", "list", "info", "side", "press", "bezel", "disc", "fx")
+
+    def section(self, name, key, draw):
+        if self.keys.get(name) == key:
+            return
+        self.cv.delete(name)
+        saved, self.hits, self.layer = self.hits, [], name
+        draw()
+        self.sec_hits[name], self.hits, self.layer = self.hits, saved, "dyn"
+        self.keys[name] = key
+        # новые элементы оказались на самом верху — опускаем их под ближайший слой, который выше по ORDER
+        # (поднимать все слои нельзя: Tk тогда перерисовывает весь холст)
+        for upper in self.ORDER[self.ORDER.index(name) + 1:]:
+            if self.cv.find_withtag(upper):
+                self.cv.tag_lower(name, upper)
+                break
+
     def redraw(self):
-        self.cv.delete("dyn")
-        self.hits = []
-        # фон плеера поверх силуэта — маленькими плитками каждый кадр, как диски
-        for tx, ty, tile in self.bg_tiles:
-            self.cv.create_image(tx, ty, image=tile, anchor="nw", tags=self.layer)
         running = self.data["running"]
         f = self.f
         sel = self.task(self.data["selected"])
@@ -319,11 +335,27 @@ class AppPlayer(tq.App2):
             self.show_toast(f"LEVEL UP ★ LV {lv}", 40)
         self.last_lv = lv
 
-        # LCD: время, статус, квест (или сообщение), время за день
+        # дуга громкости: прогресс фокус-сессии (на паузе — прогресс дня)
+        progress = (self.session_elapsed() % FOCUS_SEC) / FOCUS_SEC if running else min(1, today / DAY_GOAL_SEC)
+        lit = int(progress * len(self.arc))
+        self.section("arc", lit, lambda: [self.rect(x1, y, x2, y + 1, ARC_DIM)
+                                          for b in self.arc[lit:] for x1, y, x2 in b])
+
+        # анимации обновляем через кадр: на прозрачном окне macOS любое изменение перерисовывает
+        # окно целиком (~35 мс), поэтому все изменения собираем на чётные кадры
+        anim = f % 2 == 0
+        # эквалайзер: танцует, пока идёт работа, на паузе затихает и замирает
+        live = running and self.data["fx"]
+        for i in range(len(self.eq) if anim else 0):
+            target = (0.35 + 0.6 * random.random() * (0.6 + 0.4 * math.sin(f * 0.3 + i))) if live else 0.08
+            self.eq[i] += (target - self.eq[i]) * 0.45
+        self.section("eq", tuple(int(h * 16) for h in self.eq), self.draw_eq)
+
+        # LCD: время, статус, квест (или подсказка/сообщение), уровень и день
         shown = self.session_elapsed() if running else (self.task_total(sel["id"]) if sel else 0)
-        self.lcd(LCD_TIME, fmt_hms(shown), 19, rounded=True)
         status = ("▶ идёт работа" if (f // 8) % 2 else "▶") if running else ("❚❚ пауза" if sel else "нет квеста")
-        self.lcd(LCD_LINE2, status, 11, LCD_SOFT)
+        if not anim and "lcd" in self.keys:
+            status = self.keys["lcd"][1]
         if self.hint:
             line3 = self.hint
         elif self.toast and self.toast[1] >= f:
@@ -332,23 +364,57 @@ class AppPlayer(tq.App2):
             line3 = sel["name"] if sel else "добавь квест →"
         if len(line3) > 24:
             line3 = line3[:23] + "…"
-        self.lcd(LCD_LINE3, line3, 12)
-        self.lcd(LCD_LINE4, f"LV {lv:02d} · день {fmt_hms(today)}", 10, LCD_SOFT)
+        lines = (fmt_hms(shown), status, line3, f"LV {lv:02d} · день {fmt_hms(today)}")
+        self.section("lcd", lines, lambda: (self.lcd(LCD_TIME, lines[0], 19, rounded=True),
+                                            self.lcd(LCD_LINE2, lines[1], 11, LCD_SOFT),
+                                            self.lcd(LCD_LINE3, lines[2], 12),
+                                            self.lcd(LCD_LINE4, lines[3], 10, LCD_SOFT)))
 
-        self.draw_eq(running, f)
-        self.draw_arc(running, today)
-        self.draw_discs(running, f)
-        self.draw_playlist(running, f)
+        tasks = self.data["tasks"]
+        rows = tuple((t["id"], t["name"], int(self.task_total(t["id"])), t["id"] == self.data["selected"],
+                      bool(running and running["task_id"] == t["id"]))
+                     for t in tasks[self.scroll:self.scroll + self.ROWS])
+        self.section("list", (self.scroll, rows, (f // 6) % 2 if running else 0),
+                     lambda: self.draw_playlist(running, f))
 
-        x1, y1, x2, y2 = INFO_AREA
-        info = [f"сессия {fmt_hms(self.session_elapsed())} · день {fmt_hms(today)}",
-                f"уровень {lv:02d} · ещё {25 - int(xp * 25)} мин · квестов {len(self.data['tasks'])}",
-                "сейчас: " + ((sel["name"] if running and sel else "пауза")[:28])]
-        for k, line in enumerate(info):
-            x = 44 if k < 2 else 132   # третья строка начинается правее большого нижнего диска
-            self.cv.create_text(x, y1 + 7 + k * 13.5, text=line, fill=LCD_INK, font=self.bold(10), anchor="w",
-                                tags=self.layer)
+        info = (f"сессия {fmt_hms(self.session_elapsed())} · день {fmt_hms(today)}",
+                f"уровень {lv:02d} · ещё {25 - int(xp * 25)} мин · квестов {len(tasks)}",
+                "сейчас: " + ((sel["name"] if running and sel else "пауза")[:28]))
+        self.section("info", info, lambda: [
+            self.cv.create_text(44 if k < 2 else 132, INFO_AREA[1] + 7 + k * 13.5, text=line, fill=LCD_INK,
+                                font=self.bold(10), anchor="w", tags=self.layer)
+            for k, line in enumerate(info)])   # третья строка — правее большого нижнего диска
 
+        side_key = (self.data["fx"], self.topmost, tuple(self.pressed.get(n, -1) >= f for n, _, _ in SIDE_BTNS))
+        self.section("side", side_key, lambda: self.draw_side(f))
+        press_key = tuple(n for n in ROUND_BTNS if self.pressed.get(n, -1) >= f)
+        self.section("press", press_key, lambda: self.draw_press(press_key))
+
+        # диски: ободки — один раз, сам диск — каждый кадр, пока крутится
+        if not anim:
+            pass
+        elif f < self.scratch_until:
+            self.disc_frame = (self.disc_frame - 3) % DISC_FRAMES   # скретч назад
+        elif running:
+            self.disc_frame = (self.disc_frame + 1) % DISC_FRAMES
+        self.section("bezel", 1, lambda: (self.drive_bezel(*DRIVE_TOP, DISC_BIG // 2),
+                                          self.drive_bezel(*DRIVE_BOTTOM, DISC_SMALL // 2)))
+        cur = DISCS[self.data["disc"]]
+        nxt = DISCS[(self.data["disc"] + 1) % len(DISCS)]
+        self.section("disc", (cur, nxt, self.disc_frame), lambda: self.draw_discs(cur, nxt))
+
+        self.section("fx", (f if self.particles else None), self.draw_particles)
+        self.hits = [h for tag in self.ORDER for h in self.sec_hits.get(tag, [])]
+
+    def draw_eq(self):
+        x1, y1, x2, y2 = EQ_BARS
+        for i, h in enumerate(self.eq):
+            bx = x1 + 3 + i * 7
+            top = y2 - 2 - (y2 - y1 - 4) * h
+            for yy in range(int(y2) - 2, int(top), -3):   # полоски из сегментов, как на картинке
+                self.rect(bx, yy - 2, bx + 5, yy, EQ_BAR)
+
+    def draw_side(self, f):
         states = {"fx": self.data["fx"], "top": self.topmost}
         for name, y, label in SIDE_BTNS:
             on = states.get(name, True)
@@ -356,45 +422,20 @@ class AppPlayer(tq.App2):
             self.cv.create_text(433, y, text=label, fill="#ffffff" if down else (GREEN if on else GREEN_DIM),
                                 font=self.bold(self.side_size), tags=self.layer)
             self.hits.append((398, y - 9, 468, y + 9, self.action(name)))
+
+    def draw_press(self, pressed):
         for name, ((cx, cy), r) in ROUND_BTNS.items():
-            if self.pressed.get(name, -1) >= f:
+            if name in pressed:
                 self.cv.create_oval(cx - r, cy - r, cx + r, cy + r, outline=GREEN, width=2, tags=self.layer)
             self.hits.append((cx - r, cy - r, cx + r, cy + r, self.action(name)))
-        self.draw_particles()
 
-    def draw_eq(self, running, f):
-        x1, y1, x2, y2 = EQ_BARS
-        live = running and self.data["fx"]
-        for i in range(len(self.eq)):
-            target = (0.35 + 0.6 * random.random() * (0.6 + 0.4 * math.sin(f * 0.3 + i))) if live else 0.08
-            self.eq[i] += (target - self.eq[i]) * 0.45
-            bx = x1 + 3 + i * 7
-            top = y2 - 2 - (y2 - y1 - 4) * self.eq[i]
-            for yy in range(int(y2) - 2, int(top), -3):   # полоски из сегментов, как на картинке
-                self.rect(bx, yy - 2, bx + 5, yy, EQ_BAR)
-
-    def draw_arc(self, running, today):
-        progress = (self.session_elapsed() % FOCUS_SEC) / FOCUS_SEC if running else min(1, today / DAY_GOAL_SEC)
-        lit = int(progress * len(self.arc))
-        for b in self.arc[lit:]:   # гасим деления дальше текущего прогресса
-            for x1, y, x2 in b:
-                self.rect(x1, y, x2, y + 1, ARC_DIM)
-
-    def draw_discs(self, running, f):
-        cur = DISCS[self.data["disc"]]
-        nxt = DISCS[(self.data["disc"] + 1) % len(DISCS)]
-        if f < self.scratch_until:
-            self.disc_frame = (self.disc_frame - 3) % DISC_FRAMES   # скретч назад
-        elif running:
-            self.disc_frame = (self.disc_frame + 1) % DISC_FRAMES
+    def draw_discs(self, cur, nxt):
         frames, _ = self.disc(cur)
         cx, cy = DRIVE_TOP
-        self.drive_bezel(cx, cy, DISC_BIG // 2)
         self.cv.create_image(cx, cy, image=frames[self.disc_frame], tags=self.layer)
         r = DISC_BIG // 2
         self.hits.append((cx - r, cy - r, cx + r, cy + r, self.scratch))
         _, small = self.disc(nxt)
-        self.drive_bezel(*DRIVE_BOTTOM, DISC_SMALL // 2)
         self.cv.create_image(*DRIVE_BOTTOM, image=small, tags=self.layer)
 
     def disc(self, name):

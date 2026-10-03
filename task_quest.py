@@ -90,7 +90,9 @@ class SkinPicker:
         width, height = 370, self.ROW * len(SKINS) + 52
         self.cv = tk.Canvas(top, width=width, height=height, bg="#16162e", highlightthickness=0)
         self.cv.pack()
-        self.icons = {name: skin_icon(name) for name in SKINS}
+        if not getattr(shell, "icons", None):   # иконки собираем один раз за запуск
+            shell.icons = {name: skin_icon(name) for name in SKINS}
+        self.icons = shell.icons
         self.current = shell.app.data.get("skin", DEFAULT_SKIN)
         self.hover = SKIN_ORDER.index(self.current) if self.current in SKINS else 0
         self.width = width
