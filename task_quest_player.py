@@ -33,16 +33,18 @@ DISC_FRAMES, DISC_BIG, DISC_SMALL = 24, 168, 112  # блоки с дисками
 DRIVE_TOP = (350, 238)     # верхний привод — текущий диск
 DRIVE_BOTTOM = (62, 675)   # нижний привод — следующий диск
 
-LCD_INK = "#050c05"        # почти чёрный зелёный — максимальный контраст на LCD
-LCD_SOFT = "#0f1f10"
-LIST_INK = "#071007"       # текст плейлиста
-LIST_SEL_INK = "#e6f6dc"   # выделенная строка — светлый текст на тёмной полосе
-LIST_SEL_BG = "#34443a"
-LIST_RUN_INK = "#006b14"
-EQ_BAR = "#3e4f42"
-ARC_DIM = "#1d3320"        # погасшие деления дуги громкости
-GREEN = "#55ff66"
-GREEN_DIM = "#2fae3c"
+# стиль Xbox-плеера: тёмный глянцевый металл и светящиеся лаймовые экраны (assets/player_xbox.png)
+LCD_INK = "#031000"        # почти чёрный зелёный — максимальный контраст на лаймовом экране
+LCD_SOFT = "#0b2c00"
+LIST_INK = "#041200"       # текст плейлиста
+LIST_SEL_INK = "#dcff9e"   # выделенная строка — светлый лайм на тёмно-зелёной полосе
+LIST_SEL_BG = "#123d00"
+LIST_RUN_INK = "#003d00"
+EQ_BAR = "#0d3a00"
+ARC_DIM = "#0f2a05"        # погасшие деления дуги громкости
+GREEN = "#a6ff3c"
+GREEN_DIM = "#5bb81e"
+BEZEL = ("#1c201e", "#4a514c", "#9aa39d", "#f2f6f3", "#8b938e", "#3a3f3c", "#0e100f")
 
 # места для текста (старый текст стёрт с фона заранее — assets/player_clean.png)
 LCD_TIME = (150, 66, 262, 88)
@@ -117,7 +119,7 @@ class AppPlayer(tq.App2):
         self.scratch_until = -1
         self.eq = [0.2] * 14
 
-        self.bg = tk.PhotoImage(file=os.path.join(ASSETS, "player_shape.png"))
+        self.bg = tk.PhotoImage(file=os.path.join(ASSETS, "player_xbox.png"))
         # фон режем на плитки 160×160 (размер как у дисков)
         self.bg_tiles = []
         for ty in range(0, H, TILE):
@@ -399,7 +401,7 @@ class AppPlayer(tq.App2):
         """Хромированный ободок привода вокруг диска — в стиле корпуса плеера."""
         self.cv.create_oval(cx - r - 9, cy - r - 9, cx + r + 9, cy + r + 9, fill="#0b0c0b", outline="",
                             tags=self.layer)
-        for k, col in enumerate(("#2c302b", "#6f776d", "#b9c0b6", "#eef2ec", "#c3cac0", "#7e867c", "#3a4039")):
+        for k, col in enumerate(BEZEL):
             rr = r + 8 - k
             self.cv.create_oval(cx - rr, cy - rr, cx + rr, cy + rr, outline=col, width=1.4, tags=self.layer)
         self.cv.create_oval(cx - r - 1, cy - r - 1, cx + r + 1, cy + r + 1, fill="#050605", outline="",
