@@ -146,9 +146,8 @@ class AppPlayer(tq.App2):
         self.data.setdefault("disc", 0)
         self.last_lv = self.level()[0]
 
-        self.layer = "static"
-        self.cv.create_image(0, 0, image=self.bg, anchor="nw", tags="static")
-        self.layer = "dyn"
+        # фон плеера рисуется в каждом кадре (см. redraw): на прозрачном окне без рамки macOS
+        # теряет картинку, нарисованную один раз до того, как окно появилось на экране
 
         self.cv.bind("<Button-1>", self.on_click)
         self.cv.bind("<B1-Motion>", self.on_drag)
@@ -292,6 +291,7 @@ class AppPlayer(tq.App2):
     def redraw(self):
         self.cv.delete("dyn")
         self.hits = []
+        self.cv.create_image(0, 0, image=self.bg, anchor="nw", tags=self.layer)
         running = self.data["running"]
         f = self.f
         sel = self.task(self.data["selected"])
