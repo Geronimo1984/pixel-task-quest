@@ -118,8 +118,7 @@ class AppPlayer(tq.App2):
         self.eq = [0.2] * 14
 
         self.bg = tk.PhotoImage(file=os.path.join(ASSETS, "player_shape.png"))
-        # фон режем на плитки 160×160: большие картинки с прозрачностью Tk выводит по частям,
-        # и на прозрачном окне macOS они не показываются; маленькие (как диски) — показываются
+        # фон режем на плитки 160×160 (размер как у дисков)
         self.bg_tiles = []
         for ty in range(0, H, TILE):
             for tx in range(0, W, TILE):
@@ -158,8 +157,6 @@ class AppPlayer(tq.App2):
         self.data.setdefault("disc", 0)
         self.last_lv = self.level()[0]
 
-        for tx, ty, tile in self.bg_tiles:   # фон плеера — один раз, под всем остальным
-            self.cv.create_image(tx, ty, image=tile, anchor="nw", tags="static")
 
         self.cv.bind("<Button-1>", self.on_click)
         self.cv.bind("<B1-Motion>", self.on_drag)
@@ -303,6 +300,10 @@ class AppPlayer(tq.App2):
     def redraw(self):
         self.cv.delete("dyn")
         self.hits = []
+        # фон плеера: маленькие плитки, заново каждый кадр — ровно как диски, которые на прозрачном
+        # окне macOS видны (большая картинка или нарисованная один раз — не видна)
+        for tx, ty, tile in self.bg_tiles:
+            self.cv.create_image(tx, ty, image=tile, anchor="nw", tags=self.layer)
         running = self.data["running"]
         f = self.f
         sel = self.task(self.data["selected"])
