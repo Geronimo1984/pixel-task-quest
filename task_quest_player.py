@@ -61,6 +61,7 @@ HINTS = {
     "stop": "■ стоп", "b_stop": "■ стоп", "eject": "⏏ экспорт в CSV", "b_eject": "⏏ экспорт в CSV",
     "prev": "⏮ предыдущий квест", "b_prev": "⏮ предыдущий квест", "next": "⏭ следующий квест",
     "b_next": "⏭ следующий квест", "green": "эквалайзер вкл/выкл", "dock": "поверх окон", "disc": "сменить диск",
+    "close": "✕ закрыть", "close2": "✕ закрыть",
 }
 ROUND_BTNS = {
     "play": ((62, 62), 17), "pause": ((28, 48), 13), "eject": ((62, 22), 13), "stop": ((96, 48), 13),
@@ -68,6 +69,7 @@ ROUND_BTNS = {
     "b_prev": ((283, 693), 18), "b_play": ((325, 693), 18), "b_next": ((375, 693), 18),
     "b_eject": ((443, 592), 17), "b_stop": ((443, 632), 17), "b_pause": ((422, 670), 17),
     "green": ((343, 135), 22), "dock": ((350, 47), 12),
+    "close": ((432, 170), 9), "close2": ((392, 332), 9),
 }
 
 
@@ -87,8 +89,15 @@ class AppPlayer(tq.App2):
         self.font = lambda size, bold=True: (fam, size, "bold" if bold else "normal")
         self.lcd_font = lambda size: (rounded, size)
 
-        self.cv = tk.Canvas(root, width=W, height=H, bg="#000000", highlightthickness=0)
+        # окно принимает форму плеера: без рамки и заголовка, всё вокруг плеера прозрачное
+        root.withdraw()
+        root.overrideredirect(True)
+        root.wm_attributes("-transparent", True)
+        root.configure(bg="systemTransparent")
+        root.deiconify()
+        self.cv = tk.Canvas(root, width=W, height=H, bg="systemTransparent", highlightthickness=0)
         self.cv.pack()
+        self.drag = None
         self.cv.focus_set()  # чтобы пробел сразу работал
         self.on_switch = None
         self.entry = None  # задачи добавляются через «add track»
@@ -106,7 +115,7 @@ class AppPlayer(tq.App2):
         self.scratch_until = -1
         self.eq = [0.2] * 14
 
-        self.bg = tk.PhotoImage(file=os.path.join(ASSETS, "player_clean.png"))
+        self.bg = tk.PhotoImage(file=os.path.join(ASSETS, "player_shape.png"))
         self.hint = None
         bold = next((f for f in ("Verdana", "Tahoma", "Arial") if f in families), fam)
         self.bold = lambda size: (bold, size, "bold")
@@ -139,6 +148,8 @@ class AppPlayer(tq.App2):
         self.layer = "dyn"
 
         self.cv.bind("<Button-1>", self.on_click)
+        self.cv.bind("<B1-Motion>", self.on_drag)
+        self.cv.bind("<ButtonRelease-1>", lambda e: setattr(self, "drag", None))
         self.cv.bind("<Motion>", self.on_motion)
         self.cv.bind("<Leave>", lambda e: setattr(self, "hint", None))
         self.cv.bind("<MouseWheel>", self.on_wheel)
@@ -157,6 +168,26 @@ class AppPlayer(tq.App2):
         if getattr(self, "_after", None):
             self.root.after_cancel(self._after)
         self.cv.destroy()
+        # возвращаем обычное окно для других скинов
+        root = self.root
+        root.withdraw()
+        root.wm_attributes("-transparent", False)
+        root.overrideredirect(False)
+        root.deiconify()
+
+    def on_click(self, e):
+        """Клик по кнопке — действие, по корпусу плеера — начать перетаскивание окна."""
+        self.root.focus_force()
+        self.cv.focus_set()
+        for x1, y1, x2, y2, cb in reversed(self.hits):
+            if x1 <= e.x <= x2 and y1 <= e.y <= y2:
+                cb()
+                return
+        self.drag = (e.x_root - self.root.winfo_x(), e.y_root - self.root.winfo_y())
+
+    def on_drag(self, e):
+        if self.drag:
+            self.root.geometry(f"+{e.x_root - self.drag[0]}+{e.y_root - self.drag[1]}")
 
     def on_motion(self, e):
         """Подсказка на LCD: что делает кнопка под мышкой."""
@@ -228,7 +259,7 @@ class AppPlayer(tq.App2):
             "dock": self.toggle_top,
             "add": self.add_task, "del": self.delete_selected, "select": lambda: self.select_step(1),
             "csv": self.export_csv, "clear": self.clear_tasks, "fx": self.toggle_fx, "top": self.toggle_top,
-            "skin": self.switch_skin,
+            "skin": self.switch_skin, "close": self.on_close, "close2": self.on_close,
         }
         return lambda: (self.press(name), acts[name]())
 
