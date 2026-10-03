@@ -14,27 +14,26 @@ import tkinter as tk
 from tkinter import font as tkfont
 
 import pixel_tracker as pt
-from moon_art import LUNA_ALPH, LUNA_BLINK, LUNA_BLINK_AT, LUNA_BODY, LUNA_COLORS, LUNA_TAIL, LUNA_TAIL_AT
 import task_quest_2000 as tq
 from pixel_tracker import HEART, SPARKLE, STAR, fmt_hms, lighten, mix, moon_cells
 
 W, H = 480, 800
 
-M = {
-    "bg": "#0b1033", "body": "#5a2f8f", "body_d": "#3a1a66", "frame": "#ff8ad8", "line": "#8a5ad0",
-    "panel": "#2a1446", "well": "#170b2e", "grid": "#26164a", "pink": "#ff6fb5", "hot": "#ff3d8b",
-    "lilac": "#c9a8ff", "yellow": "#ffd84a", "mint": "#5fe0a0", "white": "#ffffff", "ink": "#1a0a33",
-    "ctrl": "#d98ae8", "ctrl_l": "#f2b8ff", "ctrl_d": "#a85ac8",
-    # окно мессенджера
-    "xp1": "#2b6fe6", "xp2": "#0a4fd6", "xp3": "#0841b8", "xp_hi": "#5d9bff", "xp_red": "#e5482f",
-    "xp_body": "#e9edff", "xp_body2": "#d3dcfb", "xp_border": "#0a4ec4", "xp_list": "#ffffff",
-    "xp_line": "#9aaee8", "xp_sel": "#cfdcff", "xp_sel_line": "#7a96e8", "xp_text": "#1a2a6a",
-    "xp_dim": "#5a6ab0", "xp_status": "#dfe5fb",
+M = {  # пастельная ночь — в тон автомату, Кирби, Синнамоли и Сейлор Мун
+    "bg": "#141640", "body": "#4b4296", "body_d": "#322b70", "frame": "#f6a3d6", "line": "#9a92ec",
+    "panel": "#23245a", "well": "#181a46", "grid": "#24275e", "pink": "#ff8cc6", "hot": "#ff5fa2",
+    "lilac": "#c7b6ff", "yellow": "#ffdf7a", "mint": "#8fe3c4", "white": "#ffffff", "ink": "#12123a",
+    "ctrl": "#c99cf0", "ctrl_l": "#e9cbff", "ctrl_d": "#9a72d6",
+    # окно мессенджера — тот же индиго, только светлее
+    "xp1": "#7b97f2", "xp2": "#5874e0", "xp3": "#4660c8", "xp_hi": "#aebfff", "xp_red": "#f06a8a",
+    "xp_body": "#eef0ff", "xp_body2": "#dde2fb", "xp_border": "#4660c8", "xp_list": "#ffffff",
+    "xp_line": "#a9b6ec", "xp_sel": "#dbe2ff", "xp_sel_line": "#8b9cec", "xp_text": "#26306e",
+    "xp_dim": "#6d76b4", "xp_status": "#e3e7fb",
 }
 
 P3 = dict(tq.P2)
-P3.update({"K": "#2a1446", "L": "#b48cf0", "l": "#8a64d0", "P": "#ff6fb5", "R": "#ff3d8b", "W": "#ffffff",
-           "Y": "#ffd84a", "O": "#ffb02e", "V": "#7a4aa8", "G": "#3ddc84", "B": "#2f6fd9", "w": "#f4e8ff"})
+P3.update({"K": "#2a2466", "L": "#c7b6ff", "l": "#9a92ec", "P": "#ff8cc6", "R": "#ff5fa2", "W": "#ffffff",
+           "Y": "#ffdf7a", "O": "#ffbf6b", "V": "#8a7fd6", "G": "#8fe3c4", "B": "#8f9cff", "w": "#f6efff"})
 
 # ── Спрайты (оригинальные) ──────────────────────────────────────────────────
 BIG_HEART = [
@@ -61,7 +60,6 @@ WING = [
     "..VVVVVVV.",
 ]
 
-PURR_FRAMES = 45  # ≈ 3.5 секунды мурчания
 
 # Кирби на звезде — точная копия присланной картинки (64×64, фон вырезан)
 KIRBY_PAL = {"a": "#690322", "b": "#da7591", "c": "#dd9baa", "d": "#9b0238", "e": "#dfd0c4", "f": "#da2261", "g": "#db9a04", "h": "#ddd702", "i": "#4b9c15", "j": "#026fc5", "k": "#6a3175", "z": "#010200"}
@@ -103,7 +101,9 @@ KIRBY_BLINK = KIRBY[:6] + [
 ] + KIRBY[9:]
 KIRBY_TRAIL = {21: "#ddd702", 22: "#ddd702", 23: "#4b9c15", 24: "#4b9c15", 25: "#026fc5", 26: "#026fc5", 27: "#6a3175", 28: "#6a3175"}  # ряды радуги
 RIDER_SCALE = 2
-RIDER_EVERY = 320  # кадров между пролётами (≈ 25 секунд)
+CINNA_EVERY = 320  # кадров между пролётами Синнаморола (≈ 25 секунд)
+KIRBY_CENTER = (424, 316)  # Кирби мчится на звезде в правой нижней панели
+KIRBY_HOP = 18  # кадров прыжка по клику
 
 # волшебная пудреница с сердцем
 COMPACT = [
@@ -146,8 +146,8 @@ SHAPES = {
     "J": [(0, 0), (0, 1), (1, 1), (2, 1)],
     "L": [(2, 0), (0, 1), (1, 1), (2, 1)],
 }
-PIECE_COLORS = {"I": "#4fc3ff", "O": "#ffc94a", "T": "#b06bff", "S": "#5fe0a0",
-                "Z": "#ff5fa8", "J": "#6f7bff", "L": "#ff8a5c"}
+PIECE_COLORS = {"I": "#8fd3ff", "O": "#ffd98a", "T": "#b9a0ff", "S": "#95e6c4",
+                "Z": "#ff9cc9", "J": "#8f9cff", "L": "#ffb38f"}
 
 
 def _rotations(cells):
@@ -265,27 +265,7 @@ class HeartStack:
         return 0
 
 
-def art_image(rows, alph=LUNA_ALPH, colors=LUNA_COLORS):
-    """Собирает PhotoImage из строк пиксель-арта (прозрачные клетки — «.»)."""
-    lut = {ch: colors[k] for k, ch in enumerate(alph)}
-    img = tk.PhotoImage(width=len(rows[0]), height=len(rows))
-    for y, row in enumerate(rows):
-        x = 0
-        while x < len(row):
-            ch = row[x]
-            if ch == ".":
-                x += 1
-                continue
-            k = x
-            while k < len(row) and row[k] == ch:
-                k += 1
-            img.put(lut[ch], to=(x, y, k, y + 1))
-            x = k
-    return img
-
-
 ASSETS = os.path.join(pt.APP_DIR, "assets")
-CRANE_FILE = os.path.join(ASSETS, "crane.png")  # автомат Kirby Crane Fever, 130×215
 
 # Hello Kitty — портрет 100×120 в левой нижней панели (точная копия кадра из картинки)
 KITTY_AT = (22, 272)
@@ -297,21 +277,23 @@ KITTY_EYES = [(36, 56), (38, 56), (35, 57), (36, 57), (38, 57), (39, 57), (36, 5
 KITTY_LIDS = [(35, 59, 40, 60), (63, 56, 68, 57)]  # закрытые глазки — тонкие чёрточки
 KITTY_SPARKS = [(11, 25), (89, 34)]
 
-# Синнаморол — круглый пузырь (радиус 40) с облачком, пролетает по экрану
-CINNA_R = 40
+# Синнаморол — круглый кадр (радиус 45) с облачком; края растворяются в мыльных пузырях
+CINNA_R = 45
 CINNA_EYES = [(32, 29), (33, 29), (32, 30), (33, 30), (34, 30), (31, 31), (32, 31), (33, 31), (34, 31), (31, 32),
               (32, 32), (33, 32), (34, 32), (51, 27), (52, 27), (51, 28), (52, 28), (53, 28), (50, 29), (51, 29),
               (52, 29), (53, 29), (50, 30), (51, 30), (52, 30), (53, 30)]
-CINNA_LIDS = [(31, 31, 35, 32), (50, 29, 54, 30)]
-CINNA_RING = [(round(math.cos(a / 64 * math.tau) * (CINNA_R + 2)), round(math.sin(a / 64 * math.tau) * (CINNA_R + 2)),
-               tq.RAINBOW[a * len(tq.RAINBOW) // 64]) for a in range(64)]
+CINNA_EYES = [(i + 5, j + 5) for i, j in CINNA_EYES]  # координаты сняты с кадра радиусом 40
+CINNA_LIDS = [(36, 36, 40, 37), (55, 34, 59, 35)]
+CINNA_BUBBLES = 20  # пузырей по контуру
 
 # Сейлор Мун — появляется в стакане, когда сессия завершена или новый уровень
 SAILOR_FRAMES = 64  # ≈ 5 секунд
 CRANE_AT = (175, 62)  # левый верхний угол картинки в стакане
+CLAW_AT = (61, 75)    # где клешня висит на картинке автомата
+CLAW_SPLIT = (88, 9)  # с какого ряда начинаются зубцы и где середина клешни
+CLAW_CYCLE = 90       # кадров на «попытку достать игрушку» (≈ 7 секунд)
 CRANE_STARS = [(32, 172), (45, 170), (57, 175), (74, 180), (95, 172), (109, 171), (16, 186), (113, 40)]
 
-LUNA_TOP = 252  # кошка стоит на дне правой нижней панели (y 392)
 
 
 def disk_cells(r):
@@ -323,8 +305,8 @@ DISKS = {r: disk_cells(r) for r in (4, 5, 7, 9)}
 WELL_X, WELL_Y, CELL = 140, 50, 20       # стакан 10×17 клеток
 PANEL_L, PANEL_R = (18, 126), (354, 462)  # колонки автомата
 XP = (36, 478, 444, 796)                  # окно мессенджера
-ROUND_BTNS = [("csv", "CSV", "#ff6fb5"), ("top", "TOP", "#4fa8ff"), ("fx", "FX", "#b06bff"),
-              ("clear", "CLR", "#ff8a5c"), ("skin", "SKIN", "#3fd8c0")]
+ROUND_BTNS = [("csv", "CSV", "#ff9cc9"), ("top", "TOP", "#8fd3ff"), ("fx", "FX", "#b9a0ff"),
+              ("clear", "CLR", "#ffb38f"), ("skin", "SKIN", "#95e6c4")]
 
 
 class AppMoon(tq.App2):
@@ -357,15 +339,20 @@ class AppMoon(tq.App2):
         self.topmost = False
         self.idle_since = time.time()
         self.stack = HeartStack()
-        self.purr_until = -1
-        self.luna_body, self.luna_blink = art_image(LUNA_BODY), art_image(LUNA_BLINK)
-        # хвост по рядам: каждый ряд сдвигается отдельно, чтобы хвост изгибался, а не съезжал целиком
-        self.luna_tail = [(r, len(row) - len(row.lstrip(".")), art_image([row.strip(".")]))
-                          for r, row in enumerate(LUNA_TAIL) if row.strip(".")]
-        try:
-            self.crane = tk.PhotoImage(file=CRANE_FILE)
-        except tk.TclError:
-            self.crane = None  # без картинки на паузе остаётся сияющее сердце
+        self.kirby_hop = -KIRBY_HOP
+        self.crane = self.load_asset("crane_empty.png") or self.load_asset("crane.png")
+        claw = self.load_asset("crane_claw.png")
+        self.claw_parts = None
+        if claw and self.crane:
+            # голова и два зубца отдельно — чтобы зубцы сжимались
+            w, h = claw.width(), claw.height()
+            top = CLAW_SPLIT[0] - CLAW_AT[1]
+            parts = []
+            for (x1, y1, x2, y2) in ((0, 0, w, top), (0, top, CLAW_SPLIT[1], h), (CLAW_SPLIT[1], top, w, h)):
+                part = tk.PhotoImage(width=x2 - x1, height=y2 - y1)
+                part.tk.call(part, "copy", claw, "-from", x1, y1, x2, y2)
+                parts.append((part, x1, y1))
+            self.claw_parts = parts
         self.kitty = self.load_asset("kitty.png")
         self.cinna_img = self.load_asset("cinna.png")
         self.sailor = self.load_asset("sailor.png")
@@ -374,7 +361,6 @@ class AppMoon(tq.App2):
         self.cinna = None
         self.sailor_show = None
         self.kitty_love = -1
-        self.rider = None
 
         self.load()
         self.data.setdefault("fx", True)
@@ -467,13 +453,13 @@ class AppMoon(tq.App2):
             col = mix(M["xp1"], M["xp2"], t * 2) if t < 0.5 else mix(M["xp2"], M["xp3"], (t - 0.5) * 2)
             self.rect(x1, y1 + i, x2, y1 + i + 1, col)
         self.rect(x1 + 2, y1 + 1, x2 - 2, y1 + 2, M["xp_hi"])
-        self.cv.create_text(x1 + 27, y1 + h / 2 + 1, text=title, fill="#0a2a7a", font=self.ui(11, True),
+        self.cv.create_text(x1 + 27, y1 + h / 2 + 1, text=title, fill="#26306e", font=self.ui(11, True),
                             anchor="w", tags=self.layer)
         self.cv.create_text(x1 + 26, y1 + h / 2, text=title, fill=M["white"], font=self.ui(11, True),
                             anchor="w", tags=self.layer)
         self.msprite(BUDDY, x1 + 14, y1 + h / 2 + 8, 2 if h > 20 else 1.5)
         if buttons:
-            for k, col in enumerate(("#3c82f6", "#3c82f6", M["xp_red"])):
+            for k, col in enumerate((M["xp2"], M["xp2"], M["xp_red"])):
                 bx2 = x2 - 6 - (2 - k) * 24
                 bx1, by1, by2 = bx2 - 20, y1 + 3, y2 - 3
                 self.rect(bx1, by1, bx2, by2, M["white"])
@@ -493,10 +479,10 @@ class AppMoon(tq.App2):
 
         # ночное небо, звёзды, луна, город
         for i in range(24):
-            self.rect(0, 470 + i * 14, W, 470 + (i + 1) * 14, mix("#0b1033", "#22307a", i / 23))
+            self.rect(0, 470 + i * 14, W, 470 + (i + 1) * 14, mix("#141640", "#2c3478", i / 23))
         for _ in range(40):
             x, y = rnd.randrange(0, W), rnd.randrange(474, 790)
-            self.rect(x, y, x + 2, y + 2, rnd.choice(("#dfe6ff", "#ffd84a", "#c9a8ff")))
+            self.rect(x, y, x + 2, y + 2, rnd.choice(("#e3e7ff", "#ffdf7a", "#c7b6ff")))
         for i, j in DISKS[9]:
             self.rect(460 + i * 2, 520 + j * 2, 462 + i * 2, 522 + j * 2,
                       "#e8ecff" if i * 0.8 + j < 4 else "#c4cbe8")
@@ -505,18 +491,18 @@ class AppMoon(tq.App2):
         x = 0
         while x < W:
             bw, bh = rnd.randint(18, 40), rnd.randint(30, 90)
-            self.rect(x, 800 - bh, x + bw, 800, "#0a0f2a")
+            self.rect(x, 800 - bh, x + bw, 800, "#10122e")
             for wy in range(800 - bh + 6, 796, 10):
                 for wx in range(x + 4, x + bw - 4, 8):
                     if rnd.random() < 0.3:
-                        self.rect(wx, wy, wx + 3, wy + 4, "#ffd84a")
+                        self.rect(wx, wy, wx + 3, wy + 4, "#ffdf7a")
             x += bw + rnd.randint(0, 6)
 
         # корпус автомата
         self.rect(6, 6, 474, 470, M["frame"])
         self.rect(9, 9, 471, 467, M["body"])
         for y in range(9, 467, 6):  # мягкая диагональная штриховка
-            self.rect(9, y, 471, y + 1, "#5f3496")
+            self.rect(9, y, 471, y + 1, "#5249a2")
         # полумесяцы и звёздочки по углам
         for i, j in moon_cells(5, 3):
             self.rect(16 + i * 3, 10 + j * 3, 19 + i * 3, 13 + j * 3, M["yellow"])
@@ -620,7 +606,7 @@ class AppMoon(tq.App2):
                 self.ptext("PLAY", rx, 200, 3, M["mint"], anchor="center", shadow=M["ink"])
         else:
             self.ptext("PAUSE", rx, 200, 3, M["pink"], anchor="center", shadow=M["ink"])
-        self.draw_luna(rx, running, f)
+        self.draw_kirby(running, f)
         self.draw_well(running, f)
 
         # бегущая строка с именем квеста
@@ -632,7 +618,6 @@ class AppMoon(tq.App2):
         self.draw_controls(running, f)
         self.draw_messenger(running, f, today)
         self.draw_particles()
-        self.draw_rider(running, f)
         self.draw_cinna(running, f)
         if self.toast and self.toast[1] >= f:
             tw = max(220, len(self.toast[0]) * 8 + 40)
@@ -642,94 +627,62 @@ class AppMoon(tq.App2):
             self.rect(x1, 200, x2, 240, M["xp_body"])
             self.uitext(W / 2, 220, self.toast[0], M["xp_text"], 12, True, anchor="center")
 
-    def draw_luna(self, rx, running, f):
-        """Чёрная кошка: машет хвостом, моргает, дремлет на паузе, мурлычет по клику."""
-        purring = f < self.purr_until
-        lively = running or purring
-        dx = (1 if f % 2 else -1) if purring else 0
-        dy = -1 if (running and (f // 10) % 2) else 0
-        x0, y0 = rx - len(LUNA_BODY[0]) / 2 + dx, LUNA_TOP + dy
-        # хвост изгибается: кончик качается сильнее всего, основание неподвижно
-        amp = 3 if lively else 1.5
-        phase = f * (0.3 if lively else 0.1)
-        last = len(LUNA_TAIL) - 1
-        for r, lead, img in self.luna_tail:
-            k = ((last - r) / last) ** 1.5
-            off = round(math.sin(phase - k * 1.2) * amp * k)
-            self.cv.create_image(x0 + LUNA_TAIL_AT[0] + lead + off, y0 + LUNA_TAIL_AT[1] + r, image=img,
-                                 anchor="nw", tags=self.layer)
-        self.cv.create_image(x0, y0, image=self.luna_body, anchor="nw", tags=self.layer)
-        # глаз: во время работы иногда моргает, на паузе дремлет и изредка открывает глаз
-        if purring:
-            closed = True
-        elif running:
-            closed = f % 55 in (0, 1, 2)
-        else:
-            closed = not (60 <= f % 130 < 84)
-        if closed:
-            self.cv.create_image(x0 + LUNA_BLINK_AT[0], y0 + LUNA_BLINK_AT[1], image=self.luna_blink,
-                                 anchor="nw", tags=self.layer)
-        if purring:  # пасхалка: мурлычет, вокруг парят сердечки
-            if f % 4 == 0:
-                self.particles.append({"kind": "float", "x": rx + random.uniform(-40, 30), "y": 280,
-                                       "vx": 0, "vy": -1.3, "life": 32, "gravity": False,
-                                       "ph": random.uniform(0, 6)})
-            if f % 15 == 0:
-                self.particles.append({"kind": "purr", "x": rx + random.choice((-30, 30)), "y": 268,
-                                       "vx": 0, "vy": -0.8, "life": 22, "gravity": False})
-        elif not running and f % 26 == 0:
-            self.particles.append({"kind": "z", "x": rx + 30, "y": 262, "vx": 0, "vy": -0.7, "life": 30})
-        self.hits.append((rx - 57, LUNA_TOP, rx + 57, 392, self.pet_kitty))
+    def kirby_happy(self):
+        """Клик по Кирби — подпрыгивает на звезде, жмурится, сердечки."""
+        self.kirby_hop = self.f
+        self.burst("heart", KIRBY_CENTER[0], KIRBY_CENTER[1] - 20, 8)
 
-    def start(self):
-        super().start()
-        if self.data["running"]:
-            self.launch_rider()  # на старте Кирби пролетает по экрану
-
-    def launch_rider(self):
-        if self.rider is None and self.data["fx"]:
-            self.rider = {"x": -70.0, "base": random.choice((26, 474)), "trail": [], "loop": None}
-
-    def rider_loop(self):
-        """Клик по Кирби — мёртвая петля с сердечками."""
-        if self.rider and self.rider["loop"] is None:
-            self.rider["loop"] = self.f
-            self.burst("heart", self.rider["x"], self.rider["base"], 8)
-
-    def draw_rider(self, running, f):
-        if self.rider is None:
-            if f % RIDER_EVERY == RIDER_EVERY // 2:
-                self.launch_rider()
-            return
-        r = self.rider
-        r["x"] += 3.2 * (1.3 if running else 1)
-        x, y = r["x"], r["base"] + math.sin(r["x"] * 0.035) * 8
-        if r["loop"] is not None:
-            k = f - r["loop"]
-            if k < 24:
-                a = k / 24 * math.tau
-                x, y = x + math.sin(a) * 30, y - (1 - math.cos(a)) * 30
-            else:
-                r["loop"] = None
-        r["trail"].append((x, y))
-        del r["trail"][:-48]
-        w, h = len(KIRBY[0]) * RIDER_SCALE, len(KIRBY) * RIDER_SCALE
-        bob = math.sin(f * 0.5) * 2
-        # радужный хвост тянется от левого края картинки, с пиксельной «волной»
-        for i in range(1, len(r["trail"])):
-            (x1, y1), (x2, _) = r["trail"][i - 1], r["trail"][i]
-            wave = RIDER_SCALE if ((len(r["trail"]) - i + f // 2) // 4) % 2 else 0
-            left, right = min(x1, x2) - w / 2, max(x1, x2) - w / 2 + 1
-            top = y1 + h / 2 - h + wave
+    def draw_kirby(self, running, f):
+        """Кирби мчится на звезде на месте: радуга струится назад, звезда покачивается, мимо летят искры."""
+        s = RIDER_SCALE
+        w, h = len(KIRBY[0]) * s, len(KIRBY) * s
+        hop = f - self.kirby_hop
+        lively = running or hop < KIRBY_HOP
+        bob = math.sin(f * (0.45 if lively else 0.15)) * (3 if lively else 2)
+        jump = -math.sin(hop / KIRBY_HOP * math.pi) * 22 if hop < KIRBY_HOP else 0
+        cx, cy = KIRBY_CENTER[0], KIRBY_CENTER[1] + bob + jump
+        top, left = cy - h / 2, cx - w / 2
+        x1, y1, x2, y2 = PANEL_R[0] + 4, 234, PANEL_R[1] - 4, 392
+        # радужный хвост от левого края панели до звезды, волна бежит назад
+        trail_top = KIRBY_CENTER[1] + bob - h / 2
+        speed = 3 if lively else 1
+        for x in range(x1, int(left) + 4, 4):
+            wave = s if ((x + f * speed) // 10) % 2 else 0
             for row, col in KIRBY_TRAIL.items():
-                self.rect(left, top + row * RIDER_SCALE, right, top + (row + 1) * RIDER_SCALE, col)
-        if f % 5 == 0:
-            self.particles.append({"kind": "sparkle", "x": x - w / 2, "y": y + random.uniform(-6, 20),
-                                   "vx": -0.5, "vy": 0, "life": 10, "gravity": False})
-        self.sprite(KIRBY_BLINK if f % 40 in (0, 1) else KIRBY, x, y + h / 2 + bob, RIDER_SCALE, pal=KIRBY_PAL)
-        self.hits.append((x - w / 2, y - h / 2, x + w / 2, y + h / 2, self.rider_loop))
-        if x > W + 90:
-            self.rider = None
+                ty = trail_top + row * s + wave
+                self.rect(x, ty, min(x + 4, left + 4), ty + s, col)
+        if f % (3 if lively else 7) == 0:  # встречные искры — ощущение скорости
+            self.particles.append({"kind": "sparkle", "x": x2, "y": random.uniform(y1 + 8, y2 - 8),
+                                   "vx": -3.5 if lively else -2, "vy": 0, "life": 26 if lively else 44,
+                                   "gravity": False})
+        closed = hop < KIRBY_HOP or f % 40 in (0, 1)
+        self.sprite(KIRBY_BLINK if closed else KIRBY, cx, cy + h / 2, s, pal=KIRBY_PAL)
+        self.hits.append((left, top, left + w, top + h, self.kirby_happy))
+
+    def draw_claw(self, x0, y0, f):
+        """Клешня опускается на тросе к игрушкам, сжимает зубцы и поднимается обратно."""
+        k = f % CLAW_CYCLE
+        if k < 20:
+            drop, grip = 0, 0                       # висит, чуть покачиваясь
+        elif k < 40:
+            drop, grip = (k - 20) * 0.7, 0           # опускается
+        elif k < 52:
+            drop, grip = 14, min(2, (k - 40) // 3)   # сжимает зубцы
+        elif k < 72:
+            drop, grip = 14 - (k - 52) * 0.7, 2      # поднимается с добычей
+        else:
+            drop, grip = 0, 2 if k < 80 else 1       # отпускает
+        sway = round(math.sin(f * 0.15)) if k < 20 else 0
+        cx, cy = x0 + CLAW_AT[0] + sway, y0 + CLAW_AT[1] + round(drop)
+        if drop >= 1:  # трос тянется от крепления до клешни
+            self.rect(x0 + CLAW_AT[0] + 8, y0 + CLAW_AT[1], x0 + CLAW_AT[0] + 10, cy + 1, "#9a96b8")
+        (head, hx, hy), (left, lx, ly), (right, rx, ry) = self.claw_parts
+        self.cv.create_image(cx + hx, cy + hy, image=head, anchor="nw", tags=self.layer)
+        self.cv.create_image(cx + lx + grip, cy + ly, image=left, anchor="nw", tags=self.layer)
+        self.cv.create_image(cx + rx - grip, cy + ry, image=right, anchor="nw", tags=self.layer)
+        if k == 46:
+            self.particles.append({"kind": "sparkle", "x": cx + 9, "y": cy + 26, "vx": 0, "vy": -0.5,
+                                   "life": 12, "gravity": False})
 
     def load_asset(self, name):
         try:
@@ -767,7 +720,11 @@ class AppMoon(tq.App2):
 
     def launch_cinna(self):
         if self.cinna is None and self.cinna_img and self.data["fx"]:
-            self.cinna = {"x": W + 50.0, "base": random.choice((150, 330)), "hearts": -1}
+            self.cinna = {"x": W + 50.0, "base": random.choice((150, 330)), "hearts": -1,
+                          "bubbles": [{"a": k / CINNA_BUBBLES * math.tau + random.uniform(-0.12, 0.12),
+                                       "d": random.uniform(CINNA_R - 9, CINNA_R + 2),
+                                       "r": random.choice((2, 3, 3, 4, 4, 5, 5, 6, 7)),
+                                       "ph": random.uniform(0, math.tau)} for k in range(CINNA_BUBBLES)]}
 
     def poke_cinna(self):
         if self.cinna:
@@ -777,7 +734,7 @@ class AppMoon(tq.App2):
     def draw_cinna(self, running, f):
         """Синнаморол в пузыре: пролетает справа налево, покачиваясь и моргая."""
         if self.cinna is None:
-            if f % RIDER_EVERY == 0:
+            if f % CINNA_EVERY == 0:
                 self.launch_cinna()
             return
         c = self.cinna
@@ -790,14 +747,20 @@ class AppMoon(tq.App2):
                 self.rect(x0 + i, y0 + j, x0 + i + 1, y0 + j + 1, "#cbd3f7")
             for a, b, cc, d in CINNA_LIDS:
                 self.rect(x0 + a, y0 + b, x0 + cc, y0 + d, "#3b4fb5")
-        for dx, dy, col in CINNA_RING:  # радужная плёнка пузыря
-            self.rect(x + dx - 1, y + dy - 1, x + dx + 1, y + dy + 1, col)
-        for k in range(5):  # блик
-            self.rect(x - 26 + k * 3, y - 30 + k * 2 - (k * k) // 2, x - 23 + k * 3, y - 28 + k * 2 - (k * k) // 2,
-                      M["white"])
-        if f % 6 == 0:
-            self.particles.append({"kind": "sparkle", "x": x + CINNA_R + 4, "y": y + random.uniform(-20, 20),
-                                   "vx": 0.6, "vy": 0, "life": 10, "gravity": False})
+        # мыльные пузыри по растворённому краю: кружат, дышат, иногда отрываются и улетают
+        for b in c["bubbles"]:
+            a = b["a"] + f * 0.012
+            d = b["d"] + math.sin(f * 0.11 + b["ph"]) * 2.5
+            r = max(2, min(7, b["r"] + round(math.sin(f * 0.08 + b["ph"]))))
+            bx, by = round(x + math.cos(a) * d), round(y + math.sin(a) * d)
+            for i, j, col in tq.RINGS[r]:
+                self.rect(bx + i, by + j, bx + i + 1, by + j + 1, col)
+            self.rect(bx - r // 2, by - r // 2, bx - r // 2 + 1, by - r // 2 + 1, M["white"])
+        if f % 7 == 0:
+            a = random.uniform(0, math.tau)
+            self.particles.append({"kind": "bubble", "x": round(x + math.cos(a) * CINNA_R),
+                                   "y": round(y + math.sin(a) * CINNA_R), "vx": 0.5, "vy": -0.7,
+                                   "r": random.choice((2, 3, 3, 4)), "life": 34, "gravity": False})
         self.hits.append((x - CINNA_R, y - CINNA_R, x + CINNA_R, y + CINNA_R, self.poke_cinna))
         if x < -60:
             self.cinna = None
@@ -824,10 +787,6 @@ class AppMoon(tq.App2):
             self.particles.append({"kind": "sparkle", "x": 240 + random.uniform(-90, 90),
                                    "y": bottom - random.uniform(20, h), "vx": 0, "vy": -0.4, "life": 12,
                                    "gravity": False})
-
-    def pet_kitty(self):
-        """Пасхалка: погладить кошечку."""
-        self.purr_until = self.f + PURR_FRAMES
 
     def draw_next(self, rx):
         for n, kind in enumerate(self.stack.queue[:2]):
@@ -869,6 +828,8 @@ class AppMoon(tq.App2):
             self.rect(x0 - 4, y0 - 4, x0 + w + 4, y0 + h + 4, M["frame"])
             self.rect(x0 - 2, y0 - 2, x0 + w + 2, y0 + h + 2, M["line"])
             self.cv.create_image(x0, y0, image=self.crane, anchor="nw", tags=self.layer)
+            if self.claw_parts:
+                self.draw_claw(x0, y0, f)
             for k, (sx, sy) in enumerate(CRANE_STARS):
                 if (f // 3 + k * 5) % 24 < 3:
                     self.msprite(SPARKLE, x0 + sx, y0 + sy + 3, 2)
@@ -922,12 +883,12 @@ class AppMoon(tq.App2):
         down = self.pressed.get("add", -1) >= self.f
         self.rect(380, 512, 434, 540, M["xp_sel_line"])
         for i in range(26):
-            self.rect(381, 513 + i, 433, 514 + i, mix("#ffffff", "#c8d4f6", (1 - i / 25) if down else i / 25))
+            self.rect(381, 513 + i, 433, 514 + i, mix("#ffffff", "#d3dbf8", (1 - i / 25) if down else i / 25))
         self.uitext(407 + (1 if down else 0), 526, "Add", M["xp_text"], 12, True, anchor="center")
         self.hits.append((380, 512, 434, 540, lambda: (self.press("add"), self.add_task())))
 
         tasks = self.data["tasks"]
-        self.uitext(56, 561, f"▾ Квесты ({len(tasks)})", "#1a3a9a", 11, True)
+        self.uitext(56, 561, f"▾ Квесты ({len(tasks)})", "#3a48a8", 11, True)
         if not tasks:
             self.uitext(240, 650, "пока пусто… добавь квест ↑", M["xp_dim"], 12, anchor="center")
         for idx in range(self.scroll, min(len(tasks), self.scroll + self.ROWS)):
@@ -943,7 +904,7 @@ class AppMoon(tq.App2):
             elif is_sel:
                 self.msprite(STAR, 64, y + 23, 2)
             else:
-                col = "#3ddc84" if idx % 2 else "#2f6fd9"
+                col = "#7fd6b4" if idx % 2 else "#8f9cff"
                 self.sprite(PERSON, 64, y + 22, 2, color=col)
             name = t["name"] if len(t["name"]) <= 30 else t["name"][:29] + "…"
             self.uitext(80, y + 14, name, M["hot"] if is_run else M["xp_text"], 12, is_run)
@@ -984,8 +945,11 @@ class AppMoon(tq.App2):
                 self.ptext(p["text"], p["x"], p["y"], 2, M["mint"], anchor="center", shadow=M["ink"])
             elif k == "float":
                 self.msprite(HEART, p["x"], p["y"], 2 if p["life"] > 8 else 1.5)
-            elif k == "purr":
-                self.text(p["x"], p["y"], "мрр~", M["pink"] if p["life"] % 6 < 3 else M["lilac"], 11)
+            elif k == "bubble":
+                for i, j, col in tq.RINGS[p["r"]]:
+                    self.rect(p["x"] + i, p["y"] + j, p["x"] + i + 1, p["y"] + j + 1, col)
+                self.rect(p["x"] - p["r"] // 2, p["y"] - p["r"] // 2, p["x"] - p["r"] // 2 + 1,
+                          p["y"] - p["r"] // 2 + 1, M["white"])
 
 
 def main():
