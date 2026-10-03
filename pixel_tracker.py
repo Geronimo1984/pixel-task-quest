@@ -315,13 +315,14 @@ def icon_grid():
     return g
 
 
-def icon_photo(size):
+def icon_photo(size, grid_fn=None):
     """PhotoImage с иконкой нужного размера (нужен созданный tk.Tk)."""
+    grid_fn = grid_fn or icon_grid
     if size < 64:
-        return icon_photo(64).subsample(64 // size)
+        return icon_photo(64, grid_fn).subsample(64 // size)
     s = size // 64
     img = tk.PhotoImage(width=size, height=size)
-    for y, row in enumerate(icon_grid()):
+    for y, row in enumerate(grid_fn()):
         for x, col in enumerate(row):
             if col:
                 img.put(col, to=(x * s, y * s, (x + 1) * s, (y + 1) * s))
@@ -568,6 +569,7 @@ class App:
             if ans:
                 self.stop()
         self.save()
+        release_lock()
         self.root.destroy()
 
     # ── ввод ──────────────────────────────────────────────────────────────
@@ -968,10 +970,48 @@ class App:
         self.root.after(FPS_MS, self.tick)
 
 
-def main():
+# ── Защита от одновременного запуска (обе версии пишут в один файл данных) ──
+LOCK_FILE = DATA_FILE + ".lock"
+
+
+def acquire_lock():
+    try:
+        with open(LOCK_FILE, encoding="utf-8") as fh:
+            pid = int(fh.read().strip() or 0)
+        if pid and pid != os.getpid():
+            os.kill(pid, 0)  # процесс жив — значит, трекер уже открыт
+            return False
+    except (OSError, ValueError):
+        pass
+    with open(LOCK_FILE, "w", encoding="utf-8") as fh:
+        fh.write(str(os.getpid()))
+    return True
+
+
+def release_lock():
+    try:
+        with open(LOCK_FILE, encoding="utf-8") as fh:
+            if fh.read().strip() == str(os.getpid()):
+                os.remove(LOCK_FILE)
+    except OSError:
+        pass
+
+
+def run(app_cls):
     root = tk.Tk()
-    App(root)
+    if not acquire_lock():
+        root.withdraw()
+        messagebox.showinfo("Трекер уже открыт",
+                            "Трекер уже запущен (возможно, другая версия).\n"
+                            "Закрой его, чтобы данные не перепутались.")
+        root.destroy()
+        return
+    app_cls(root)
     root.mainloop()
+
+
+def main():
+    run(App)
 
 
 if __name__ == "__main__":
