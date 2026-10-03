@@ -7,6 +7,7 @@
 Запуск:  python3 task_quest.py moon
 """
 import math
+import os
 import random
 import time
 import tkinter as tk
@@ -283,6 +284,10 @@ def art_image(rows, alph=LUNA_ALPH, colors=LUNA_COLORS):
     return img
 
 
+CRANE_FILE = os.path.join(pt.APP_DIR, "assets", "crane.png")  # автомат Kirby Crane Fever, 130×215
+CRANE_AT = (175, 62)  # левый верхний угол картинки в стакане
+CRANE_STARS = [(32, 172), (45, 170), (57, 175), (74, 180), (95, 172), (109, 171), (16, 186), (113, 40)]
+
 LUNA_TOP = 252  # кошка стоит на дне правой нижней панели (y 392)
 
 
@@ -331,6 +336,10 @@ class AppMoon(tq.App2):
         self.stack = HeartStack()
         self.purr_until = -1
         self.luna_body, self.luna_tail = art_image(LUNA_BODY), art_image(LUNA_TAIL)
+        try:
+            self.crane = tk.PhotoImage(file=CRANE_FILE)
+        except tk.TclError:
+            self.crane = None  # без картинки на паузе остаётся сияющее сердце
         self.rider = None
 
         self.load()
@@ -705,7 +714,20 @@ class AppMoon(tq.App2):
                 if p["y"] + cy >= 0:
                     self.block(WELL_X + (p["x"] + cx) * CELL, WELL_Y + (p["y"] + cy) * CELL,
                                PIECE_COLORS[p["kind"]])
-        if not running:
+        if not running and self.crane:
+            # на паузе в стакане стоит автомат Kirby Crane Fever, звёздочки мерцают
+            x0, y0 = CRANE_AT
+            w, h = self.crane.width(), self.crane.height()
+            self.rect(x0 - 4, y0 - 4, x0 + w + 4, y0 + h + 4, M["frame"])
+            self.rect(x0 - 2, y0 - 2, x0 + w + 2, y0 + h + 2, M["line"])
+            self.cv.create_image(x0, y0, image=self.crane, anchor="nw", tags=self.layer)
+            for k, (sx, sy) in enumerate(CRANE_STARS):
+                if (f // 3 + k * 5) % 24 < 3:
+                    self.msprite(SPARKLE, x0 + sx, y0 + sy + 3, 2)
+            if (f // 8) % 2:
+                self.rect(150, y0 + h + 10, 330, y0 + h + 30, M["well"])
+                self.ptext("PRESS START", 240, y0 + h + 13, 2, M["white"], anchor="center", shadow=M["hot"])
+        elif not running:
             # большое сияющее сердце с лучами, как на экране «PRESS START»
             pulse = abs(math.sin(f * 0.1))
             for i in range(9):
