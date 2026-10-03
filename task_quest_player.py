@@ -32,15 +32,17 @@ DISC_FRAMES, DISC_BIG, DISC_SMALL = 24, 84, 56
 DRIVE_TOP = (350, 238)     # верхний привод — текущий диск
 DRIVE_BOTTOM = (62, 675)   # нижний привод — следующий диск
 
-LCD_INK = "#2c352c"        # тёмный текст на LCD
-LIST_INK = "#5d6a5a"       # текст плейлиста
-LIST_SEL_INK = "#8a9286"   # выделенная строка (как пятая строка на картинке)
-LIST_SEL_BG = "#a4a99d"
+LCD_INK = "#0f170f"        # тёмный контрастный текст на LCD
+LCD_SOFT = "#243024"
+LIST_INK = "#162016"       # текст плейлиста
+LIST_SEL_INK = "#e6f6dc"   # выделенная строка — светлый текст на тёмной полосе
+LIST_SEL_BG = "#34443a"
+LIST_RUN_INK = "#0b5c1a"
 EQ_BAR = "#3e4f42"
 ARC_DIM = "#1d3320"        # погасшие деления дуги громкости
 GREEN = "#38f04a"
 
-# где на картинке стоит старый текст — его закрашиваем цветом LCD и пишем своё
+# места для текста (старый текст стёрт с фона заранее — assets/player_clean.png)
 LCD_TIME = (150, 66, 262, 88)
 LCD_LINE2 = (138, 90, 272, 105)
 LCD_LINE3 = (128, 110, 280, 124)
@@ -51,8 +53,15 @@ LIST_TOP, LIST_ROW = 349, 19
 INFO_AREA = (40, 582, 398, 623)
 
 # зелёные текстовые кнопки справа от плейлиста и кнопки плеера (центр, полуширина, полувысота)
-SIDE_BTNS = [("add", 399), ("del", 418), ("select", 437), ("csv", 456), ("clear", 475), ("fx", 494),
-             ("top", 515), ("skin", 535)]
+SIDE_BTNS = [("add", 399, "+ добавить"), ("del", 418, "− удалить"), ("select", 437, "▼ дальше"),
+             ("csv", 456, "⇩ в CSV"), ("clear", 475, "✕ очистить"), ("fx", 494, "♫ анимация"),
+             ("top", 515, "⧉ поверх"), ("skin", 535, "◐ скины")]
+HINTS = {
+    "play": "▶ старт", "b_play": "▶ старт", "pause": "❚❚ пауза", "b_pause": "❚❚ пауза",
+    "stop": "■ стоп", "b_stop": "■ стоп", "eject": "⏏ экспорт в CSV", "b_eject": "⏏ экспорт в CSV",
+    "prev": "⏮ предыдущий квест", "b_prev": "⏮ предыдущий квест", "next": "⏭ следующий квест",
+    "b_next": "⏭ следующий квест", "green": "эквалайзер вкл/выкл", "dock": "поверх окон", "disc": "сменить диск",
+}
 ROUND_BTNS = {
     "play": ((62, 62), 17), "pause": ((28, 48), 13), "eject": ((62, 22), 13), "stop": ((96, 48), 13),
     "prev": ((38, 90), 13), "next": ((86, 90), 13),
@@ -75,10 +84,8 @@ class AppPlayer(tq.App2):
         families = set(tkfont.families())
         fam = next((f for f in ("Menlo", "Monaco", "Courier") if f in families), "TkFixedFont")
         rounded = next((f for f in ("Arial Rounded MT Bold", "Verdana", "Arial") if f in families), fam)
-        arial = next((f for f in ("Arial", "Helvetica", "Verdana") if f in families), fam)
         self.font = lambda size, bold=True: (fam, size, "bold" if bold else "normal")
         self.lcd_font = lambda size: (rounded, size)
-        self.list_font = lambda size: (arial, size)
 
         self.cv = tk.Canvas(root, width=W, height=H, bg="#000000", highlightthickness=0)
         self.cv.pack()
@@ -99,7 +106,16 @@ class AppPlayer(tq.App2):
         self.scratch_until = -1
         self.eq = [0.2] * 14
 
-        self.bg = tk.PhotoImage(file=os.path.join(ASSETS, "player.png"))
+        self.bg = tk.PhotoImage(file=os.path.join(ASSETS, "player_clean.png"))
+        self.hint = None
+        bold = next((f for f in ("Verdana", "Tahoma", "Arial") if f in families), fam)
+        self.bold = lambda size: (bold, size, "bold")
+        self.side_font = {}
+        for name, _, label in SIDE_BTNS:   # подбираем размер, чтобы подпись влезла в капсулу
+            size = 10
+            while size > 7 and tkfont.Font(family=bold, size=size, weight="bold").measure(label) > 64:
+                size -= 1
+            self.side_font[name] = size
         self.discs = {}
         for name in DISCS:
             strip = tk.PhotoImage(file=os.path.join(ASSETS, f"disc_{name}.png"))
@@ -121,13 +137,10 @@ class AppPlayer(tq.App2):
         self.layer = "static"
         self.cv.create_image(0, 0, image=self.bg, anchor="nw", tags="static")
         self.layer = "dyn"
-        # цвета LCD, снятые с картинки посередине экранов (по углам — тёмный ободок)
-        self.blank = {"time": "#91a28f", "l2": "#92a390", "l3": "#96a995", "l4": "#96a995", "eq": "#8fa08c",
-                      "info": "#96a794"}
-        self.row_bg = [self.sample((40, LIST_TOP + i * LIST_ROW + 2, 44, LIST_TOP + i * LIST_ROW + 17))
-                       for i in range(self.ROWS)]
 
         self.cv.bind("<Button-1>", self.on_click)
+        self.cv.bind("<Motion>", self.on_motion)
+        self.cv.bind("<Leave>", lambda e: setattr(self, "hint", None))
         self.cv.bind("<MouseWheel>", self.on_wheel)
         self.cv.bind("<Button-4>", lambda e: self.scroll_by(-1))
         self.cv.bind("<Button-5>", lambda e: self.scroll_by(1))
@@ -135,7 +148,7 @@ class AppPlayer(tq.App2):
         root.protocol("WM_DELETE_WINDOW", self.on_close)
 
         if not self.data["tasks"]:
-            self.show_toast("add track — новый квест", 80)
+            self.show_toast("«+ добавить» — новый квест", 80)
         elif self.data["running"]:
             self.show_toast("с возвращением ♥", 50)
         self.tick()
@@ -145,11 +158,15 @@ class AppPlayer(tq.App2):
             self.root.after_cancel(self._after)
         self.cv.destroy()
 
-    def sample(self, rect):
-        x1, y1, x2, y2 = rect
-        pts = [(x1, y1), (x2 - 1, y1), (x1, y2 - 1), (x2 - 1, y2 - 1)]
-        cols = [self.bg.get(x, y) for x, y in pts]
-        return "#%02x%02x%02x" % tuple(sum(c[k] for c in cols) // 4 for k in range(3))
+    def on_motion(self, e):
+        """Подсказка на LCD: что делает кнопка под мышкой."""
+        self.hint = None
+        for name, ((cx, cy), r) in ROUND_BTNS.items():
+            if abs(e.x - cx) <= r and abs(e.y - cy) <= r:
+                self.hint = HINTS.get(name)
+        dx, dy = DRIVE_TOP
+        if abs(e.x - dx) <= 42 and abs(e.y - dy) <= 42:
+            self.hint = HINTS["disc"]
 
     # ── действия ──────────────────────────────────────────────────────────
     def add_task(self, _event=None):
@@ -220,12 +237,9 @@ class AppPlayer(tq.App2):
             self.start()
 
     # ── отрисовка ─────────────────────────────────────────────────────────
-    def lcd(self, key, rect, text, size, anchor="center", color=LCD_INK):
+    def lcd(self, rect, text, font, color=LCD_INK):
         x1, y1, x2, y2 = rect
-        self.rect(x1, y1, x2, y2, self.blank[key])
-        x = {"center": (x1 + x2) / 2, "w": x1 + 2, "e": x2 - 2}[anchor]
-        self.cv.create_text(x, (y1 + y2) / 2, text=text, fill=color, font=self.lcd_font(size), anchor=anchor,
-                            tags=self.layer)
+        self.cv.create_text((x1 + x2) / 2, (y1 + y2) / 2, text=text, fill=color, font=font, tags=self.layer)
 
     def redraw(self):
         self.cv.delete("dyn")
@@ -241,17 +255,19 @@ class AppPlayer(tq.App2):
 
         # LCD: время, статус, квест (или сообщение), время за день
         shown = self.session_elapsed() if running else (self.task_total(sel["id"]) if sel else 0)
-        self.lcd("time", LCD_TIME, fmt_hms(shown), 15)
-        self.lcd("l2", LCD_LINE2, ("▶ play" if (f // 8) % 2 else "▶") if running else "■ pause"
-                 if sel else "- - -", 9)
-        if self.toast and self.toast[1] >= f:
+        self.lcd(LCD_TIME, fmt_hms(shown), self.lcd_font(18))
+        status = ("▶ идёт работа" if (f // 8) % 2 else "▶") if running else ("❚❚ пауза" if sel else "нет квеста")
+        self.lcd(LCD_LINE2, status, self.bold(9), LCD_SOFT)
+        if self.hint:
+            line3 = self.hint
+        elif self.toast and self.toast[1] >= f:
             line3 = self.toast[0]
         else:
-            line3 = sel["name"] if sel else "no track"
-        if len(line3) > 26:
-            line3 = line3[:25] + "…"
-        self.lcd("l3", LCD_LINE3, line3, 10)
-        self.lcd("l4", LCD_LINE4, f"lv {lv:02d}  ·  {fmt_hms(today)} today", 8)
+            line3 = sel["name"] if sel else "добавь квест →"
+        if len(line3) > 22:
+            line3 = line3[:21] + "…"
+        self.lcd(LCD_LINE3, line3, self.bold(11))
+        self.lcd(LCD_LINE4, f"LV {lv:02d} · день {fmt_hms(today)}", self.bold(9), LCD_SOFT)
 
         self.draw_eq(running, f)
         self.draw_arc(running, today)
@@ -259,17 +275,19 @@ class AppPlayer(tq.App2):
         self.draw_playlist(running, f)
 
         x1, y1, x2, y2 = INFO_AREA
-        self.rect(x1, y1, x2, y2, self.blank["info"])
-        info = [f"time/total : {fmt_hms(self.session_elapsed())}/{fmt_hms(today)}+",
-                f"track info : lv {lv:02d} · {int(xp * 25):02d}/25 min · квестов {len(self.data['tasks'])}",
-                "nowplaying: " + ((sel["name"] if running and sel else "—")[:34])]
+        info = [f"сессия {fmt_hms(self.session_elapsed())}  ·  за день {fmt_hms(today)}",
+                f"уровень {lv:02d}  ·  до следующего {25 - int(xp * 25)} мин  ·  квестов {len(self.data['tasks'])}",
+                "сейчас: " + ((sel["name"] if running and sel else "пауза")[:36])]
         for k, line in enumerate(info):
-            self.cv.create_text(45, y1 + 7 + k * 13.5, text=line, fill=LCD_INK, font=self.lcd_font(8), anchor="w",
+            self.cv.create_text(45, y1 + 7 + k * 13.5, text=line, fill=LCD_INK, font=self.bold(8), anchor="w",
                                 tags=self.layer)
 
-        for name, y in SIDE_BTNS:
-            if self.pressed.get(name, -1) >= f:
-                self.rect(398, y - 8, 468, y + 8, "", GREEN, 1)
+        states = {"fx": self.data["fx"], "top": self.topmost}
+        for name, y, label in SIDE_BTNS:
+            on = states.get(name, True)
+            down = self.pressed.get(name, -1) >= f
+            self.cv.create_text(433, y, text=label, fill="#ffffff" if down else (GREEN if on else "#1f7a2a"),
+                                font=self.bold(self.side_font[name]), tags=self.layer)
             self.hits.append((398, y - 9, 468, y + 9, self.action(name)))
         for name, ((cx, cy), r) in ROUND_BTNS.items():
             if self.pressed.get(name, -1) >= f:
@@ -279,7 +297,6 @@ class AppPlayer(tq.App2):
 
     def draw_eq(self, running, f):
         x1, y1, x2, y2 = EQ_BARS
-        self.rect(x1, y1, x2, y2, self.blank["eq"])
         live = running and self.data["fx"]
         for i in range(len(self.eq)):
             target = (0.35 + 0.6 * random.random() * (0.6 + 0.4 * math.sin(f * 0.3 + i))) if live else 0.08
@@ -313,12 +330,9 @@ class AppPlayer(tq.App2):
     def draw_playlist(self, running, f):
         x1, y1, x2, y2 = LIST_AREA
         tasks = self.data["tasks"]
-        for i in range(self.ROWS):
-            ry = LIST_TOP + i * LIST_ROW
-            self.rect(x1, ry, x2, ry + LIST_ROW, self.row_bg[i])
         if not tasks:
-            self.cv.create_text(45, LIST_TOP + 10, text="плейлист пуст — нажми add track", fill=LIST_INK,
-                                font=self.list_font(12), anchor="w", tags=self.layer)
+            self.cv.create_text(45, LIST_TOP + 10, text="плейлист пуст — нажми «+ добавить»", fill=LIST_INK,
+                                font=self.bold(11), anchor="w", tags=self.layer)
         for idx in range(self.scroll, min(len(tasks), self.scroll + self.ROWS)):
             t = tasks[idx]
             ry = LIST_TOP + (idx - self.scroll) * LIST_ROW
@@ -326,14 +340,14 @@ class AppPlayer(tq.App2):
             is_run = running and running["task_id"] == t["id"]
             if is_sel:
                 self.rect(x1 + 2, ry + 1, x2 - 8, ry + LIST_ROW - 1, LIST_SEL_BG)
-            ink = LIST_SEL_INK if is_sel else LIST_INK
+            ink = LIST_SEL_INK if is_sel else (LIST_RUN_INK if is_run else LIST_INK)
             name = t["name"] if len(t["name"]) <= 30 else t["name"][:29] + "…"
             prefix = ("▶ " if (f // 6) % 2 else "▷ ") if is_run else ""
             self.cv.create_text(45, ry + LIST_ROW / 2, text=f"{idx + 1}. {prefix}{name}", fill=ink,
-                                font=self.list_font(12), anchor="w", tags=self.layer)
+                                font=self.bold(10), anchor="w", tags=self.layer)
             total = self.task_total(t["id"])
             self.cv.create_text(352, ry + LIST_ROW / 2, text=fmt_hms(total)[1:] if total < 36000 else fmt_hms(total),
-                                fill=ink, font=self.list_font(12), anchor="e", tags=self.layer)
+                                fill=ink, font=self.bold(10), anchor="e", tags=self.layer)
             tid = t["id"]
             self.hits.append((x1, ry, x2 - 8, ry + LIST_ROW, lambda tid=tid: self.select(tid)))
 
