@@ -44,6 +44,12 @@ PALETTE = {
 }
 LEVEL_SEC = 25 * 60  # один уровень = 25 минут работы за день
 
+# «цифровой дождь» на фоне
+RAIN_CHARS = "ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝ0123456789★♥"
+RAIN_STEP = 16      # высота «клетки» символа
+RAIN_GAP = 20       # расстояние между колонками
+RAIN_TRAIL = 14     # максимальная длина хвоста
+
 # ── Спрайты (оригинальные персонажи) ─────────────────────────────────────────
 # Мяу-Луна: белая кошечка с жёлтым полумесяцем на лбу
 CAT_AWAKE = [
@@ -257,6 +263,12 @@ def moon_cells(r=6, shift=3):
     return cells
 
 
+def mix(c1, c2, t):
+    a = [int(c1[i:i + 2], 16) for i in (1, 3, 5)]
+    b = [int(c2[i:i + 2], 16) for i in (1, 3, 5)]
+    return "#" + "".join(f"{int(x + (y - x) * t):02x}" for x, y in zip(a, b))
+
+
 # ── Иконка приложения (64×64 пиксельных клетки) ─────────────────────────────
 def icon_grid():
     n, lo, hi, r = 64, 5, 58, 9
@@ -268,12 +280,7 @@ def icon_grid():
         cx, cy = min(max(x, a + rr), b - rr), min(max(y, a + rr), b - rr)
         return (x - cx) ** 2 + (y - cy) ** 2 <= rr * rr
 
-    def mix(c1, c2, t):
-        a = [int(c1[i:i + 2], 16) for i in (1, 3, 5)]
-        b = [int(c2[i:i + 2], 16) for i in (1, 3, 5)]
-        return "#" + "".join(f"{int(x + (y - x) * t):02x}" for x, y in zip(a, b))
-
-    g = [[None] * n for _ in range(n)]
+    g =[[None] * n for _ in range(n)]
     for y in range(n):
         for x in range(n):
             if not inside(x, y):
@@ -354,6 +361,10 @@ class App:
         self.stars = [(random.randint(36, 440), random.randint(64, 178), random.randint(0, 40)) for _ in range(28)]
         self.moon = moon_cells()
         self.clouds = [[140, 96, 0.5], [330, 76, 0.3], [520, 112, 0.4]]
+        self.rain = [self.new_drop(x, random.uniform(-H, H)) for x in range(10, W, RAIN_GAP)]
+        # голова — почти белая, хвост плавно растворяется в фоне
+        self.rain_colors = ["#d8ffe9"] + [mix("#3fdc8a", C["bg"], 0.25 + 0.7 * k / RAIN_TRAIL)
+                                           for k in range(1, RAIN_TRAIL)]
 
         self.load()
         self.last_lv = self.level()[0]
@@ -374,7 +385,7 @@ class App:
 
     # ── данные ────────────────────────────────────────────────────────────
     def load(self):
-        self.data = {"tasks": [], "sessions": [], "running": None, "selected": None}
+        self.data = {"tasks": [], "sessions": [], "running": None, "selected": None, "rain": True}
         if os.path.exists(DATA_FILE):
             try:
                 with open(DATA_FILE, encoding="utf-8") as fh:
@@ -518,6 +529,12 @@ class App:
         self.root.attributes("-topmost", self.topmost)
         self.show_toast("Поверх окон: " + ("ВКЛ" if self.topmost else "ВЫКЛ"), 20)
 
+    def toggle_rain(self):
+        self.press("rain")
+        self.data["rain"] = not self.data["rain"]
+        self.save()
+        self.show_toast("Цифровой дождь: " + ("ВКЛ" if self.data["rain"] else "ВЫКЛ"), 20)
+
     def on_close(self):
         if self.data["running"]:
             ans = messagebox.askyesnocancel(
@@ -652,11 +669,37 @@ class App:
     ROW_H = 40
     LIST_TOP = 512
 
+    @staticmethod
+    def new_drop(x, y):
+        return {"x": x, "y": y, "speed": random.uniform(2.5, 6), "len": random.randint(6, RAIN_TRAIL),
+                "chars": [random.choice(RAIN_CHARS) for _ in range(RAIN_TRAIL)]}
+
+    def draw_rain(self, running):
+        # рисуется первым в кадре — значит, оказывается позади всего остального
+        boost = 1.8 if running else 1
+        for i, d in enumerate(self.rain):
+            d["y"] += d["speed"] * boost
+            if d["y"] - d["len"] * RAIN_STEP > H:
+                self.rain[i] = d = self.new_drop(d["x"], random.uniform(-160, 0))
+            if random.random() < 0.15:
+                d["chars"][random.randrange(RAIN_TRAIL)] = random.choice(RAIN_CHARS)
+            head = int(d["y"] // RAIN_STEP)  # символы стоят в клетках, как на старом терминале
+            for k in range(d["len"]):
+                row = head - k
+                y = row * RAIN_STEP
+                if y < -RAIN_STEP or y > H:
+                    continue
+                self.cv.create_text(d["x"], y, text=d["chars"][row % RAIN_TRAIL], fill=self.rain_colors[k],
+                                    font=self.font(11, k == 0), tags="dyn")
+
     def redraw(self):
         self.cv.delete("dyn")
         self.hits = []
         running = self.data["running"]
         f = self.f
+
+        if self.data["rain"]:
+            self.draw_rain(running)
 
         # заголовок
         self.text(W / 2, 28, "★ PIXEL TASK QUEST ★", C["yellow"], 19, shadow=C["pink"])
@@ -870,6 +913,8 @@ class App:
         fy = H - 40
         self.button("csv", 24, fy, 94, fy + 26, "CSV", C["pink"], self.export_csv, 11)
         self.button("top", 104, fy, 174, fy + 26, "TOP", C["yellow"] if self.topmost else C["dim"], self.toggle_top, 11)
+        self.button("rain", 184, fy, 254, fy + 26, "RAIN", C["mint"] if self.data["rain"] else C["dim"],
+                    self.toggle_rain, 11)
         self.text(456, fy + 13, "ПРОБЕЛ — старт/стоп", C["dim"], 10, anchor="e", shadow=None)
 
     def pixel_text(self, s, cx, top, scale, color):
