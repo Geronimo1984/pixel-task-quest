@@ -30,6 +30,12 @@ M = {  # пастельная ночь — в тон автомату, Кирб�
     "xp_line": "#a9b6ec", "xp_sel": "#dbe2ff", "xp_sel_line": "#8b9cec", "xp_text": "#26306e",
     "xp_dim": "#6d76b4", "xp_status": "#e3e7fb",
 }
+# насыщенные цвета текста — чтобы всё легко читалось на пастельном фоне
+T = {
+    "label": "#ff5fb0", "time": "#ff6ab8", "session": "#3ff2a8", "today": "#ffd23f", "level": "#b59bff",
+    "play": "#3ff2a8", "pause": "#ff4fa8", "btn": "#1e1550", "marquee": "#ffb3e0",
+    "msg": "#141a52", "msg_dim": "#3a4596", "msg_head": "#2433a0", "msg_run": "#e8327f",
+}
 
 P3 = dict(tq.P2)
 P3.update({"K": "#2a2466", "L": "#c7b6ff", "l": "#9a92ec", "P": "#ff8cc6", "R": "#ff5fa2", "W": "#ffffff",
@@ -445,7 +451,7 @@ class AppMoon(tq.App2):
         self.rect(x1 + 2, y1 + 2, x2 - 2, y2 - 2, M["line"])
         self.rect(x1 + 4, y1 + 4, x2 - 4, y2 - 4, M["panel"])
         if label:
-            self.ptext(label, (x1 + x2) / 2, y1 + 8, 2, M["frame"], anchor="center", shadow=M["ink"])
+            self.ptext(label, (x1 + x2) / 2, y1 + 8, 2, T["label"], anchor="center", shadow=M["ink"])
 
     def xp_titlebar(self, x1, y1, x2, y2, title, buttons=True):
         h = y2 - y1
@@ -543,7 +549,7 @@ class AppMoon(tq.App2):
         self.msprite(WING, 87, 452, 1.5, flip=True)
         self.msprite(WING, 125, 452, 1.5)
         for i, (_, label, _) in enumerate(ROUND_BTNS):
-            self.ptext(label, 352 + i * 25, 456, 1, M["body_d"], anchor="center")
+            self.ptext(label, 352 + i * 25, 456, 1, T["btn"], anchor="center")
 
         # окно мессенджера
         x1, y1, x2, y2 = XP
@@ -577,17 +583,17 @@ class AppMoon(tq.App2):
         # колонки
         cx = sum(PANEL_L) / 2
         total = self.task_total(sel["id"]) if sel else 0
-        self.pixel_digits(fmt_hms(total), cx, 72, 2, M["pink"], shadow=M["ink"])
+        self.pixel_digits(fmt_hms(total), cx, 72, 2, T["time"], shadow=M["ink"])
         self.pixel_digits(fmt_hms(self.session_elapsed()), cx, 124, 2,
-                          M["mint"] if running else M["line"], shadow=M["ink"])
-        self.pixel_digits(fmt_hms(today), cx, 176, 2, M["yellow"], shadow=M["ink"])
+                          T["session"] if running else M["line"], shadow=M["ink"])
+        self.pixel_digits(fmt_hms(today), cx, 176, 2, T["today"], shadow=M["ink"])
         lv, xp = self.level()
         if lv > self.last_lv and running:
             self.burst("sparkle", 240, 200, 18)
             self.show_toast(f"LEVEL UP! ★ LV {lv}", 40)
             self.sailor_show = f
         self.last_lv = lv
-        self.ptext(f"LV {lv:02d}", cx, 226, 2, M["lilac"], anchor="center", shadow=M["ink"])
+        self.ptext(f"LV {lv:02d}", cx, 226, 2, T["level"], anchor="center", shadow=M["ink"])
         filled = int(xp * 5)
         for i in range(5):
             on = i < filled or (i == filled and running and (f // 4) % 2)
@@ -604,9 +610,9 @@ class AppMoon(tq.App2):
         self.draw_next(rx)
         if running:
             if (f // 6) % 2:
-                self.ptext("PLAY", rx, 200, 3, M["mint"], anchor="center", shadow=M["ink"])
+                self.ptext("PLAY", rx, 200, 3, T["play"], anchor="center", shadow=M["ink"])
         else:
-            self.ptext("PAUSE", rx, 200, 3, M["pink"], anchor="center", shadow=M["ink"])
+            self.ptext("PAUSE", rx, 200, 3, T["pause"], anchor="center", shadow=M["ink"])
         self.draw_kirby(running, f)
         self.draw_well(running, f)
 
@@ -614,7 +620,7 @@ class AppMoon(tq.App2):
         name = sel["name"] if sel else "выбери квест"
         if len(name) > 40:
             name = name[:39] + "…"
-        self.text(W / 2, 413, f"♥ {name} ♥", M["pink"], 12)
+        self.uitext(W / 2, 413, f"♥ {name} ♥", T["marquee"], 12, True, anchor="center")
 
         self.draw_controls(running, f)
         self.draw_messenger(running, f, today)
@@ -626,7 +632,7 @@ class AppMoon(tq.App2):
             self.rect(x1 - 1, 179, x2 + 1, 241, M["xp_border"])
             self.xp_titlebar(x1, 180, x2, 200, "Quest Messenger", buttons=False)
             self.rect(x1, 200, x2, 240, M["xp_body"])
-            self.uitext(W / 2, 220, self.toast[0], M["xp_text"], 12, True, anchor="center")
+            self.uitext(W / 2, 220, self.toast[0], T["msg"], 12, True, anchor="center")
 
     def kirby_happy(self):
         """Клик по Кирби — подпрыгивает на звезде, жмурится, сердечки."""
@@ -895,13 +901,13 @@ class AppMoon(tq.App2):
         self.rect(380, 512, 434, 540, M["xp_sel_line"])
         for i in range(26):
             self.rect(381, 513 + i, 433, 514 + i, mix("#ffffff", "#d3dbf8", (1 - i / 25) if down else i / 25))
-        self.uitext(407 + (1 if down else 0), 526, "Add", M["xp_text"], 12, True, anchor="center")
+        self.uitext(407 + (1 if down else 0), 526, "Add", T["msg"], 12, True, anchor="center")
         self.hits.append((380, 512, 434, 540, lambda: (self.press("add"), self.add_task())))
 
         tasks = self.data["tasks"]
-        self.uitext(56, 561, f"▾ Квесты ({len(tasks)})", "#3a48a8", 11, True)
+        self.uitext(56, 561, f"▾ Квесты ({len(tasks)})", T["msg_head"], 12, True)
         if not tasks:
-            self.uitext(240, 650, "пока пусто… добавь квест ↑", M["xp_dim"], 12, anchor="center")
+            self.uitext(240, 650, "пока пусто… добавь квест ↑", T["msg_dim"], 12, True, anchor="center")
         for idx in range(self.scroll, min(len(tasks), self.scroll + self.ROWS)):
             t = tasks[idx]
             y = self.LIST_TOP + (idx - self.scroll) * self.ROW_H
@@ -918,9 +924,9 @@ class AppMoon(tq.App2):
                 col = "#7fd6b4" if idx % 2 else "#8f9cff"
                 self.sprite(PERSON, 64, y + 22, 2, color=col)
             name = t["name"] if len(t["name"]) <= 30 else t["name"][:29] + "…"
-            self.uitext(80, y + 14, name, M["hot"] if is_run else M["xp_text"], 12, is_run)
+            self.uitext(80, y + 14, name, T["msg_run"] if is_run else T["msg"], 12, True)
             self.uitext(404, y + 14, fmt_hms(self.task_total(t["id"])),
-                        M["hot"] if is_run else M["xp_dim"], 11, is_run, anchor="e")
+                        T["msg_run"] if is_run else T["msg_dim"], 12, True, anchor="e")
             self.uitext(420, y + 14, "✕", M["xp_red"], 11, True, anchor="center")
             tid = t["id"]
             self.hits.append((50, y, 410, y + 28, lambda tid=tid: self.select(tid)))
@@ -940,8 +946,8 @@ class AppMoon(tq.App2):
         else:
             self.disk(52, 779, 4, 1.5, "#a0a8c8")
             status = "Пауза"
-        self.uitext(62, 779, status, M["xp_text"], 11)
-        self.uitext(434, 779, f"сегодня {fmt_hms(today)}", M["xp_dim"], 11, anchor="e")
+        self.uitext(62, 779, status, T["msg"], 11, True)
+        self.uitext(434, 779, f"сегодня {fmt_hms(today)}", T["msg_dim"], 11, True, anchor="e")
 
     def draw_particles(self):
         for p in self.particles:
