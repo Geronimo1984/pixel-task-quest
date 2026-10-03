@@ -24,9 +24,7 @@ from pixel_tracker import fmt_hms
 
 W, H = 480, 740
 TILE = 160
-FLOAT_AT = (-190, 205)      # парящий наклонный 3D-диск — слева от плеера (координаты от угла плеера)
-FLOAT_FRAMES = 24
-DRIVE_BOX = 188             # окошко верхнего привода: диск 168 + ободок
+DRIVE_BOX = 106             # окошко верхнего привода: диск 84 + ободок
 ASSETS = os.path.join(pt.APP_DIR, "assets")
 FOCUS_SEC = 25 * 60
 DAY_GOAL_SEC = 8 * 3600
@@ -40,8 +38,8 @@ DISC_TITLES = {  # имя файла assets/disc_<имя>.png → названи
     "outlast": "Outlast Trinity", "sims2": "The Sims 2", "sh3": "Silent Hill 3",
 }
 DISCS = list(DISC_TITLES)
-DISC_FRAMES, DISC_BIG, DISC_SMALL = 24, 168, 112  # блоки с дисками в 2 раза больше родных приводов
-DRIVE_TOP = (350, 238)     # верхний привод — текущий диск
+DISC_FRAMES, DISC_BIG, DISC_SMALL = 24, 84, 56  # самый большой размер, при котором приводы не вылезают за контур
+DRIVE_TOP = (352, 234)     # верхний привод — текущий диск (здесь в форму плеера влезает круг r=55)
 DRIVE_BOTTOM = (62, 675)   # нижний привод — следующий диск
 
 # стиль Xbox-плеера: тёмный глянцевый металл и светящиеся лаймовые экраны (assets/player_xbox.png)
@@ -192,7 +190,7 @@ class AppPlayer(tq.App2):
         self.fit_cache = {}
         # один общий размер для всех подписей капсулы — самый крупный, при котором влезает каждая
         size = 12
-        while size > 8 and any(tkfont.Font(family=bold, size=size, weight="bold").measure(label) > 66
+        while size > 8 and any(tkfont.Font(family=bold, size=size, weight="bold").measure(label) > 56
                                for _, _, label in SIDE_BTNS):
             size -= 1
         self.side_size = size
@@ -206,14 +204,7 @@ class AppPlayer(tq.App2):
                 self.cv.create_rectangle(x1, y1, x2, y2, fill="#000000", outline="", tags="static")
         for tx, ty, tile in self.bg_tiles:   # картинка плеера поверх силуэта — один раз
             self.cv.create_image(tx, ty, image=tile, anchor="nw", tags="static")
-        fstrip = tk.PhotoImage(file=os.path.join(ASSETS, "disc_float.png"))
-        size = fstrip.height()
-        self.float_frames = []
-        for k in range(FLOAT_FRAMES):
-            fr = tk.PhotoImage(width=size, height=size)
-            fr.tk.call(fr, "copy", fstrip, "-from", k * size, 0, (k + 1) * size, size)
-            self.float_frames.append(fr)
-        self.float_size, self.float_frame, self.hover = size, 0, None
+        self.hover = None
         self.keys, self.sec_hits = {}, {}
 
         self.load()
@@ -233,6 +224,7 @@ class AppPlayer(tq.App2):
         root.bind("<space>", self.on_space)
         root.protocol("WM_DELETE_WINDOW", self.on_close)
         self.make_overlays()
+        root.bind("<Configure>", lambda e: self.place_overlays() if e.widget is root else None)
 
         if not self.data["tasks"]:
             self.show_toast("«добавить» — новый квест", 80)
@@ -242,7 +234,7 @@ class AppPlayer(tq.App2):
 
     # ── окошки поверх плеера: всё, что меняется каждый кадр ─────────────────
     # macOS при любом изменении перерисовывает прозрачное окно целиком (~35 мс у плеера),
-    # поэтому крутящийся диск, эквалайзер и парящий диск живут в своих маленьких окнах
+    # поэтому крутящийся диск и эквалайзер живут в своих маленьких окнах
     def make_overlays(self):
         self.root.update_idletasks()
         cx, cy = DRIVE_TOP
@@ -259,15 +251,7 @@ class AppPlayer(tq.App2):
         self.eq_bg.tk.call(self.eq_bg, "copy", self.bg, "-from", x1, y1, x2, y2)
         self.ov_eq.cv.create_rectangle(0, 0, x2 - x1, y2 - y1, fill="#000000", outline="")
         self.ov_eq.cv.create_image(0, 0, image=self.eq_bg, anchor="nw")
-        # парящий наклонный диск: подложка-силуэт и кадр вращения
-        fx, fy = FLOAT_AT
-        self.ov_float = Overlay(self, fx, fy, self.float_size, self.float_size, click=self.scratch,
-                                hint=HINTS["disc"])
-        with open(os.path.join(ASSETS, "disc_float_mask.json"), encoding="utf-8") as fh:
-            for a, b, c2, d in json.load(fh):
-                self.ov_float.cv.create_rectangle(a, b, c2, d, fill="#000000", outline="")
-        self.ov_float_img = self.ov_float.cv.create_image(0, 0, anchor="nw")
-        self.overlays = [self.ov_disc, self.ov_eq, self.ov_float]
+        self.overlays = [self.ov_disc, self.ov_eq]
         self.ov_state = {}
 
     def toggle_top(self):
@@ -281,6 +265,7 @@ class AppPlayer(tq.App2):
             ov.place()
 
     def teardown(self):
+        self.root.unbind("<Configure>")
         if getattr(self, "_after", None):
             self.root.after_cancel(self._after)
         for ov in getattr(self, "overlays", []):
@@ -488,9 +473,9 @@ class AppPlayer(tq.App2):
                 f"уровень {lv:02d} · ещё {25 - int(xp * 25)} мин · квестов {len(tasks)}",
                 "сейчас: " + ((sel["name"] if running and sel else "пауза")[:28]))
         self.section("info", info, lambda: [
-            self.cv.create_text(44 if k < 2 else 132, INFO_AREA[1] + 7 + k * 13.5, text=line, fill=LCD_INK,
+            self.cv.create_text(44, INFO_AREA[1] + 7 + k * 13.5, text=line, fill=LCD_INK,
                                 font=self.bold(10), anchor="w", tags=self.layer)
-            for k, line in enumerate(info)])   # третья строка — правее большого нижнего диска
+            for k, line in enumerate(info)])
 
         side_key = (self.data["fx"], self.topmost, tuple(self.pressed.get(n, -1) >= f for n, _, _ in SIDE_BTNS))
         self.section("side", side_key, lambda: self.draw_side(f))
@@ -504,7 +489,7 @@ class AppPlayer(tq.App2):
             self.disc_frame = (self.disc_frame - 3) % DISC_FRAMES   # скретч назад
         elif running:
             self.disc_frame = (self.disc_frame + 1) % DISC_FRAMES
-        self.section("bezel", 1, lambda: self.drive_bezel(*DRIVE_BOTTOM, DISC_SMALL // 2))
+        self.section("bezel", 1, lambda: self.drive_bezel(*DRIVE_BOTTOM, DISC_SMALL // 2, ring=6))
         cur = DISCS[self.data["disc"]]
         nxt = DISCS[(self.data["disc"] + 1) % len(DISCS)]
         self.ov_update("disc", (cur, self.disc_frame),
@@ -512,12 +497,6 @@ class AppPlayer(tq.App2):
         self.section("disc", nxt, lambda: self.cv.create_image(*DRIVE_BOTTOM, image=self.disc(nxt)[1],
                                                                tags=self.layer))
 
-        # парящий 3D-диск: во время работы крутится быстро, на паузе — медленно
-        if running or f % 3 == 0:
-            self.float_frame = (self.float_frame + 1) % FLOAT_FRAMES
-        self.ov_update("float", self.float_frame,
-                       lambda: self.ov_float.cv.itemconfigure(self.ov_float_img,
-                                                              image=self.float_frames[self.float_frame]))
         self.section("hover", (self.hover, (f // 5) % 2 if self.hover else 0), self.draw_hover)
 
         self.section("fx", (f if self.particles else None), self.draw_particles)
@@ -583,12 +562,13 @@ class AppPlayer(tq.App2):
             self.discs[name] = (frames, tk.PhotoImage(file=os.path.join(ASSETS, f"disc_{name}_small.png")))
         return self.discs[name]
 
-    def drive_bezel(self, cx, cy, r):
+    def drive_bezel(self, cx, cy, r, ring=8):
         """Хромированный ободок привода вокруг диска — в стиле корпуса плеера."""
-        self.cv.create_oval(cx - r - 9, cy - r - 9, cx + r + 9, cy + r + 9, fill="#0b0c0b", outline="",
-                            tags=self.layer)
-        for k, col in enumerate(BEZEL):
-            rr = r + 8 - k
+        self.cv.create_oval(cx - r - ring - 1, cy - r - ring - 1, cx + r + ring + 1, cy + r + ring + 1,
+                            fill="#0b0c0b", outline="", tags=self.layer)
+        cols = BEZEL[:ring - 1] if ring < 8 else BEZEL
+        for k, col in enumerate(cols):
+            rr = r + ring - k
             self.cv.create_oval(cx - rr, cy - rr, cx + rr, cy + rr, outline=col, width=1.4, tags=self.layer)
         self.cv.create_oval(cx - r - 1, cy - r - 1, cx + r + 1, cy + r + 1, fill="#050605", outline="",
                             tags=self.layer)
