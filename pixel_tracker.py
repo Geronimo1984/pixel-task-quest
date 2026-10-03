@@ -317,12 +317,13 @@ def icon_grid():
 
 def icon_photo(size, grid_fn=None):
     """PhotoImage с иконкой нужного размера (нужен созданный tk.Tk)."""
-    grid_fn = grid_fn or icon_grid
-    if size < 64:
-        return icon_photo(64, grid_fn).subsample(64 // size)
-    s = size // 64
+    grid = (grid_fn or icon_grid)()
+    n = len(grid)
+    if size < n:
+        return icon_photo(n, grid_fn).subsample(n // size)
+    s = size // n
     img = tk.PhotoImage(width=size, height=size)
-    for y, row in enumerate(grid_fn()):
+    for y, row in enumerate(grid):
         for x, col in enumerate(row):
             if col:
                 img.put(col, to=(x * s, y * s, (x + 1) * s, (y + 1) * s))
@@ -332,7 +333,7 @@ def icon_photo(size, grid_fn=None):
 class App:
     def __init__(self, root):
         self.root = root
-        root.title("Pixel Task Quest")
+        root.title("Task Quest · Pixel")
         root.resizable(False, False)
         root.configure(bg=C["bg"])
 
@@ -346,11 +347,7 @@ class App:
         for row, y in enumerate(range(10, H, 24)):
             for x in range(12 * (row % 2), W, 24):
                 self.cv.create_rectangle(x, y, x + 3, y + 3, fill="#261d57", outline="", tags="bg")
-        try:
-            self.icon = icon_photo(256)
-            root.iconphoto(True, self.icon)
-        except tk.TclError:
-            pass
+        self.on_switch = None  # задаётся оболочкой task_quest.py
 
         self.f = 0
         self.particles = []
@@ -551,6 +548,18 @@ class App:
         self.topmost = not self.topmost
         self.root.attributes("-topmost", self.topmost)
         self.show_toast("Поверх окон: " + ("ВКЛ" if self.topmost else "ВЫКЛ"), 20)
+
+    def switch_skin(self):
+        self.press("skin")
+        if self.on_switch:
+            self.on_switch()
+
+    def teardown(self):
+        """Убирает этот скин из окна, чтобы на его место встал другой."""
+        if getattr(self, "_after", None):
+            self.root.after_cancel(self._after)
+        self.entry.destroy()
+        self.cv.destroy()
 
     def toggle_rain(self):
         self.press("rain")
@@ -945,7 +954,8 @@ class App:
         self.button("top", 104, fy, 174, fy + 26, "TOP", C["yellow"] if self.topmost else C["dim"], self.toggle_top, 11)
         self.button("rain", 184, fy, 254, fy + 26, "RAIN", C["mint"] if self.data["rain"] else C["dim"],
                     self.toggle_rain, 11)
-        self.text(456, fy + 13, "ПРОБЕЛ — старт/стоп", C["dim"], 10, anchor="e", shadow=None)
+        self.button("skin", 264, fy, 334, fy + 26, "SKIN", C["mint"], self.switch_skin, 11)
+        self.text(456, fy + 13, "ПРОБЕЛ ▶/■", C["dim"], 10, anchor="e", shadow=None)
 
     def pixel_text(self, s, cx, top, scale, color):
         # мигающее двоеточие заменено пробелом — рисуем его как пустой символ той же ширины
@@ -967,7 +977,7 @@ class App:
         self.f += 1
         self.update_particles()
         self.redraw()
-        self.root.after(FPS_MS, self.tick)
+        self._after = self.root.after(FPS_MS, self.tick)
 
 
 # ── Защита от одновременного запуска (обе версии пишут в один файл данных) ──
@@ -997,21 +1007,9 @@ def release_lock():
         pass
 
 
-def run(app_cls):
-    root = tk.Tk()
-    if not acquire_lock():
-        root.withdraw()
-        messagebox.showinfo("Трекер уже открыт",
-                            "Трекер уже запущен (возможно, другая версия).\n"
-                            "Закрой его, чтобы данные не перепутались.")
-        root.destroy()
-        return
-    app_cls(root)
-    root.mainloop()
-
-
 def main():
-    run(App)
+    import task_quest  # единое приложение со скинами
+    task_quest.main("pixel")
 
 
 if __name__ == "__main__":

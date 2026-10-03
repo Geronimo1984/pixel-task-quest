@@ -205,6 +205,22 @@ BOMB = [
     "...KKKKK....",
 ]
 
+SKIN_ICON = [  # палитра художника — смена скина
+    "...KKKKKK...",
+    ".KKNNNNNNKK.",
+    "KNNRRNNYYNNK",
+    "KNNRRNNYYNNK",
+    "KNNNNNNNNNNK",
+    "KNCCNNNKKNNK",
+    "KNCCNNK..KNK",
+    "KNNNNNK..KNK",
+    ".KNNGGNKKNK.",
+    "..KNGGNNNK..",
+    "...KKKKKK...",
+]
+
+SLOT_X0, SLOT_STEP, SLOT_W = 19, 45, 40  # ячейки инвентаря
+
 RAINBOW = ["#3fe0ff", "#b98cff", "#ff4fa3", "#ffe14d", "#3ddc84"]
 NOISE = ["#15142a", "#2a2840", "#4a4866", "#7a7898", "#b8b6d0", "#e8e6ff", "#ff4fa3", "#3fe0ff"]
 
@@ -288,7 +304,7 @@ class App2(pt.App):
 
     def __init__(self, root):  # noqa: super().__init__ не вызываем — у этой версии своя сцена
         self.root = root
-        root.title("Task Quest 2000")
+        root.title("Task Quest · 2000")
         root.resizable(False, False)
         root.configure(bg=N["bg"])
         families = set(tkfont.families())
@@ -298,11 +314,7 @@ class App2(pt.App):
 
         self.cv = tk.Canvas(root, width=W, height=H, bg=N["bg"], highlightthickness=0)
         self.cv.pack()
-        try:
-            self.icon = pt.icon_photo(256, icon_grid_2000)
-            root.iconphoto(True, self.icon)
-        except tk.TclError:
-            pass
+        self.on_switch = None  # задаётся оболочкой task_quest.py
 
         self.f = 0
         self.layer = "dyn"
@@ -628,13 +640,13 @@ class App2(pt.App):
 
         # инвентарь
         self.neon(*PANELS[5])
-        icons = [(FLOPPY, 3, "CSV"), (PIN, 3, "TOP"), (BUBBLE_ICON, 3, "FX"), (BOMB, 3, "CLR")]
-        for i, (spr, sc, label) in enumerate(icons):
-            sx = 27 + i * 54
-            self.rect(sx, 735, sx + 44, 779, "#ffb02e" if i % 2 == 0 else N["pink"])
-            self.rect(sx + 2, 737, sx + 42, 777, N["ink"])
-            self.sprite(spr, sx + 22, 757 + len(spr) * sc / 2, sc)
-            self.ptext(label, sx + 22, 786, 1, N["cyan"], anchor="center")
+        icons = [(FLOPPY, "CSV"), (PIN, "TOP"), (BUBBLE_ICON, "FX"), (BOMB, "CLR"), (SKIN_ICON, "SKIN")]
+        for i, (spr, label) in enumerate(icons):
+            sx = SLOT_X0 + i * SLOT_STEP
+            self.rect(sx, 735, sx + SLOT_W, 779, "#ffb02e" if i % 2 == 0 else N["pink"])
+            self.rect(sx + 2, 737, sx + SLOT_W - 2, 777, N["ink"])
+            self.sprite(spr, sx + SLOT_W / 2, 757 + len(spr) * 2.5 / 2, 2.5)
+            self.ptext(label, sx + SLOT_W / 2, 786, 1, N["cyan"], anchor="center")
 
         # уровень и портрет
         self.neon(*PANELS[6])
@@ -827,14 +839,15 @@ class App2(pt.App):
 
     def draw_items(self):
         actions = [("csv", self.export_csv, None), ("top", self.toggle_top, self.topmost),
-                   ("fx", self.toggle_fx, self.data["fx"]), ("clear", self.clear_tasks, None)]
+                   ("fx", self.toggle_fx, self.data["fx"]), ("clear", self.clear_tasks, None),
+                   ("skin", self.switch_skin, None)]
         for i, (name, cb, state) in enumerate(actions):
-            sx = 27 + i * 54
+            sx = SLOT_X0 + i * SLOT_STEP
             if state is not None:
-                self.rect(sx + 34, 739, sx + 39, 744, N["green"] if state else "#3a3550")
+                self.rect(sx + SLOT_W - 9, 739, sx + SLOT_W - 4, 744, N["green"] if state else "#3a3550")
             if self.pressed.get(name, -1) >= self.f:
-                self.rect(sx, 735, sx + 44, 779, "", N["white"], 3)
-            self.hits.append((sx, 735, sx + 44, 795, cb))
+                self.rect(sx, 735, sx + SLOT_W, 779, "", N["white"], 3)
+            self.hits.append((sx, 735, sx + SLOT_W, 795, cb))
 
     def draw_level(self, running, f, today):
         lv, xp = self.level()
@@ -863,7 +876,8 @@ class App2(pt.App):
 
 
 def main():
-    pt.run(App2)
+    import task_quest  # единое приложение со скинами
+    task_quest.main("2000")
 
 
 if __name__ == "__main__":

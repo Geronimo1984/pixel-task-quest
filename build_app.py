@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Рисует иконки и собирает «Pixel Task Quest.app» и «Task Quest 2000.app» рядом со скриптом.
+"""Рисует иконку и собирает «Task Quest.app» (оба скина в одном приложении) рядом со скриптом.
 
 Запуск:  python3 build_app.py
 После этого приложение можно перетащить в «Программы» или в Dock.
@@ -11,13 +11,12 @@ import sys
 import tkinter as tk
 
 import pixel_tracker as pt
-import task_quest_2000 as tq
+import task_quest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 APPS = [
     # имя приложения, скрипт, функция иконки, id бандла, png-иконка для README
-    ("Pixel Task Quest", "pixel_tracker.py", pt.icon_grid, "local.pixeltaskquest", "icon.png"),
-    ("Task Quest 2000", "task_quest_2000.py", tq.icon_grid_2000, "local.taskquest2000", "icon_2000.png"),
+    ("Task Quest", "task_quest.py", task_quest.icon_grid_combined, "local.taskquest", "icon.png"),
 ]
 
 INFO_PLIST = """<?xml version="1.0" encoding="UTF-8"?>
@@ -27,8 +26,8 @@ INFO_PLIST = """<?xml version="1.0" encoding="UTF-8"?>
   <key>CFBundleName</key><string>{name}</string>
   <key>CFBundleDisplayName</key><string>{name}</string>
   <key>CFBundleIdentifier</key><string>{bundle_id}</string>
-  <key>CFBundleVersion</key><string>1.1</string>
-  <key>CFBundleShortVersionString</key><string>1.1</string>
+  <key>CFBundleVersion</key><string>2.0</string>
+  <key>CFBundleShortVersionString</key><string>2.0</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleExecutable</key><string>launcher</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
