@@ -28,7 +28,15 @@ ASSETS = os.path.join(pt.APP_DIR, "assets")
 FOCUS_SEC = 25 * 60
 DAY_GOAL_SEC = 8 * 3600
 
-DISCS = ["kirby", "bratz", "re4"]
+DISC_TITLES = {  # имя файла assets/disc_<имя>.png → название для LCD
+    "kirby": "Kirby Air Ride", "bratz": "Bratz Rock Angelz", "re4": "Resident Evil 4",
+    "gow": "God of War", "sonic98": "Sonic · Hardcore 98", "nirvana": "Nirvana · Nevermind",
+    "evilwithin": "The Evil Within", "dmc3": "Devil May Cry 3", "dmc": "Devil May Cry",
+    "sh2": "Silent Hill 2", "matrix": "Matrix: Path of Neo", "re4ps3": "Resident Evil 4 PS3",
+    "manhunt": "Manhunt", "mk": "MK: Deception", "sonicadv": "Sonic Adventure",
+    "outlast": "Outlast Trinity", "sims2": "The Sims 2", "sh3": "Silent Hill 3",
+}
+DISCS = list(DISC_TITLES)
 DISC_FRAMES, DISC_BIG, DISC_SMALL = 24, 168, 112  # блоки с дисками в 2 раза больше родных приводов
 DRIVE_TOP = (350, 238)     # верхний привод — текущий диск
 DRIVE_BOTTOM = (62, 675)   # нижний привод — следующий диск
@@ -141,16 +149,7 @@ class AppPlayer(tq.App2):
                                for _, _, label in SIDE_BTNS):
             size -= 1
         self.side_size = size
-        self.discs = {}
-        for name in DISCS:
-            strip = tk.PhotoImage(file=os.path.join(ASSETS, f"disc_{name}.png"))
-            frames = []
-            for k in range(DISC_FRAMES):
-                fr = tk.PhotoImage(width=DISC_BIG, height=DISC_BIG)
-                fr.tk.call(fr, "copy", strip, "-from", k * DISC_BIG, 0, (k + 1) * DISC_BIG, DISC_BIG)
-                frames.append(fr)
-            small = tk.PhotoImage(file=os.path.join(ASSETS, f"disc_{name}_small.png"))
-            self.discs[name] = (frames, small)
+        self.discs = {}  # диски грузятся по требованию — нужны только текущий и следующий
         with open(os.path.join(ASSETS, "player_arc.json"), encoding="utf-8") as fh:
             self.arc = json.load(fh)
         # силуэт плеера фигурами: на прозрачном окне macOS картинка видна только поверх
@@ -161,7 +160,7 @@ class AppPlayer(tq.App2):
 
         self.load()
         self.data.setdefault("fx", True)
-        self.data.setdefault("disc", 0)
+        self.data["disc"] = self.data.get("disc", 0) % len(DISCS)
         self.last_lv = self.level()[0]
 
 
@@ -252,6 +251,7 @@ class AppPlayer(tq.App2):
         super().start()
         if self.data["running"]:
             self.data["disc"] = (self.data["disc"] + 1) % len(DISCS)  # на старте — следующий диск
+            self.show_toast("диск: " + DISC_TITLES[DISCS[self.data["disc"]]], 25)
             self.save()
 
     def scratch(self):
@@ -259,7 +259,7 @@ class AppPlayer(tq.App2):
         self.scratch_until = self.f + 12
         self.data["disc"] = (self.data["disc"] + 1) % len(DISCS)
         self.save()
-        self.show_toast("диск: " + ("Kirby Air Ride", "Bratz Rock Angelz", "Resident Evil 4")[self.data["disc"]], 25)
+        self.show_toast("диск: " + DISC_TITLES[DISCS[self.data["disc"]]], 25)
 
     def toggle_fx(self):
         self.press("fx")
@@ -387,15 +387,27 @@ class AppPlayer(tq.App2):
             self.disc_frame = (self.disc_frame - 3) % DISC_FRAMES   # скретч назад
         elif running:
             self.disc_frame = (self.disc_frame + 1) % DISC_FRAMES
-        frames, _ = self.discs[cur]
+        frames, _ = self.disc(cur)
         cx, cy = DRIVE_TOP
         self.drive_bezel(cx, cy, DISC_BIG // 2)
         self.cv.create_image(cx, cy, image=frames[self.disc_frame], tags=self.layer)
         r = DISC_BIG // 2
         self.hits.append((cx - r, cy - r, cx + r, cy + r, self.scratch))
-        _, small = self.discs[nxt]
+        _, small = self.disc(nxt)
         self.drive_bezel(*DRIVE_BOTTOM, DISC_SMALL // 2)
         self.cv.create_image(*DRIVE_BOTTOM, image=small, tags=self.layer)
+
+    def disc(self, name):
+        """Кадры вращения и маленькая картинка диска (загружаются при первом обращении)."""
+        if name not in self.discs:
+            strip = tk.PhotoImage(file=os.path.join(ASSETS, f"disc_{name}.png"))
+            frames = []
+            for k in range(DISC_FRAMES):
+                fr = tk.PhotoImage(width=DISC_BIG, height=DISC_BIG)
+                fr.tk.call(fr, "copy", strip, "-from", k * DISC_BIG, 0, (k + 1) * DISC_BIG, DISC_BIG)
+                frames.append(fr)
+            self.discs[name] = (frames, tk.PhotoImage(file=os.path.join(ASSETS, f"disc_{name}_small.png")))
+        return self.discs[name]
 
     def drive_bezel(self, cx, cy, r):
         """Хромированный ободок привода вокруг диска — в стиле корпуса плеера."""
