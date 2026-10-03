@@ -151,6 +151,11 @@ class AppPlayer(tq.App2):
             self.discs[name] = (frames, small)
         with open(os.path.join(ASSETS, "player_arc.json"), encoding="utf-8") as fh:
             self.arc = json.load(fh)
+        # силуэт плеера фигурами: на прозрачном окне macOS картинка видна только поверх
+        # непрозрачной подложки (как диски поверх тёмных кругов приводов)
+        with open(os.path.join(ASSETS, "player_silhouette.json"), encoding="utf-8") as fh:
+            for x1, y1, x2, y2 in json.load(fh):
+                self.cv.create_rectangle(x1, y1, x2, y2, fill="#000000", outline="", tags="static")
 
         self.load()
         self.data.setdefault("fx", True)
@@ -300,8 +305,7 @@ class AppPlayer(tq.App2):
     def redraw(self):
         self.cv.delete("dyn")
         self.hits = []
-        # фон плеера: маленькие плитки, заново каждый кадр — ровно как диски, которые на прозрачном
-        # окне macOS видны (большая картинка или нарисованная один раз — не видна)
+        # фон плеера поверх силуэта — маленькими плитками каждый кадр, как диски
         for tx, ty, tile in self.bg_tiles:
             self.cv.create_image(tx, ty, image=tile, anchor="nw", tags=self.layer)
         running = self.data["running"]
