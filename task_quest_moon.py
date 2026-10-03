@@ -84,21 +84,46 @@ KITTY_SLEEP = KITTY[:7] + ["KLLLLLLLLLLLLLLK", "KLKKKLLLLLKKKLLK"] + KITTY[9:]
 KITTY_HAPPY = KITTY[:7] + ["KLLLKLLLLLLKLLLK", "KLLKLKLLLLKLKLLK"] + KITTY[9:]  # глазки «^ ^»
 PURR_FRAMES = 45  # ≈ 3.5 секунды мурчания
 
-# Моти верхом на падающей звезде (оригинальный персонаж из первого скина)
-MOTI_RIDER = pt.MOTI
-MOTI_BLINK = pt.MOTI[:3] + [".KppppppppppK.", ".KppKKppKKppK."] + pt.MOTI[5:]
-RIDE_STAR = [
-    "..........KKK...........",
-    ".........KYYYK..........",
-    ".KKKKKKKKYYWYYKKKKKKKK..",
-    "..KYYYYYYYYYYYYYYYYYYK..",
-    "....KYYYYYYYYYYYYYYK....",
-    "......KYYYYOOYYYYK......",
-    ".....KYYYYK..KYYYYK.....",
-    "....KYYYK......KYYYK....",
-    "....KKK..........KKK....",
+# Кирби на звезде — точная копия присланной картинки (64×64, фон вырезан)
+KIRBY_PAL = {"a": "#690322", "b": "#da7591", "c": "#dd9baa", "d": "#9b0238", "e": "#dfd0c4", "f": "#da2261", "g": "#db9a04", "h": "#ddd702", "i": "#4b9c15", "j": "#026fc5", "k": "#6a3175", "z": "#010200"}
+KIRBY = [
+    "...............aabbbbbaa.........",
+    ".............abbcccccccbba.......",
+    "............abcccccccccccbd......",
+    "...........abcccccccccccccba.....",
+    ".......aabbbbccccccccccccccb.....",
+    "......abcccbbcccccccabccabcca....",
+    "......acccccbcccccccezccezccbb...",
+    "......bcccccbcccccccdzccdzccbca..",
+    "......acccccbccccccczzcczzccbcb..",
+    ".......bbbbbbccbbbbcbaccbaccbcb..",
+    "........abbbbccffffcbbccbbffbcb..",
+    "..........abbcccccccccccccccba...",
+    "..........abbccccccccccaccbba....",
+    ".........aabbcccccccccccccbb.....",
+    ".........afdbbbcccccccccbbba.....",
+    "........aeffdbbbbbbbbbbbbba......",
+    "........affffdbbbbbbbbbbbaa......",
+    "..aaaaa.afffddaddbbbbbdddddaa....",
+    ".aggggggaaaaaaaaaaaaaddddffdaa...",
+    "agghhhhgggggggggggggaddddfffdaa..",
+    "agghhhhhhhgggggggggggaddddffdaga.",
+    "hagghhhhhhhhggggggggggaddddddggga",
+    "hhaagghhhhhhhhggggggggggaadagggga",
+    "iiiiaagggghhhhhhhhhhhhhggggggggga",
+    "iiiiiiaggghhhheehhhhhhhhhhhhhhga.",
+    "jjjjjjjagghhhheehhhgghhhhhhhhhhga",
+    "jjjjjjjagghhhhhhhhggggghhhhhhhhga",
+    "kkkkkkkkagghhhggggaaaaagggghhhhga",
+    "kkkkkkkkkaaaaaaaaakkkkkaaaaaaaaa.",
 ]
-RAINBOW_TRAIL = ["#ff3d5a", "#ff9a3d", "#ffe14d", "#5fe06a", "#3fa8ff", "#9b5cff"]
+KIRBY_BLINK = KIRBY[:6] + [
+    "......acccccbcccccccccccccccbb...",
+    "......bcccccbcccccccdcccdcccbca..",
+    "......acccccbcccccccaaccaaccbcb..",
+] + KIRBY[9:]
+KIRBY_TRAIL = {21: "#ddd702", 22: "#ddd702", 23: "#4b9c15", 24: "#4b9c15", 25: "#026fc5", 26: "#026fc5", 27: "#6a3175", 28: "#6a3175"}  # ряды радуги
+RIDER_SCALE = 2
 RIDER_EVERY = 320  # кадров между пролётами (≈ 25 секунд)
 
 # волшебная пудреница с сердцем
@@ -592,14 +617,14 @@ class AppMoon(tq.App2):
     def start(self):
         super().start()
         if self.data["running"]:
-            self.launch_rider()  # на старте Моти пролетает по экрану
+            self.launch_rider()  # на старте Кирби пролетает по экрану
 
     def launch_rider(self):
         if self.rider is None and self.data["fx"]:
             self.rider = {"x": -70.0, "base": random.choice((26, 474)), "trail": [], "loop": None}
 
     def rider_loop(self):
-        """Клик по Моти — мёртвая петля с сердечками."""
+        """Клик по Кирби — мёртвая петля с сердечками."""
         if self.rider and self.rider["loop"] is None:
             self.rider["loop"] = self.f
             self.burst("heart", self.rider["x"], self.rider["base"], 8)
@@ -620,22 +645,22 @@ class AppMoon(tq.App2):
             else:
                 r["loop"] = None
         r["trail"].append((x, y))
-        del r["trail"][:-42]
-        # радужный хвост с пиксельной «волной»
+        del r["trail"][:-48]
+        w, h = len(KIRBY[0]) * RIDER_SCALE, len(KIRBY) * RIDER_SCALE
+        bob = math.sin(f * 0.5) * 2
+        # радужный хвост тянется от левого края картинки, с пиксельной «волной»
         for i in range(1, len(r["trail"])):
             (x1, y1), (x2, _) = r["trail"][i - 1], r["trail"][i]
-            wave = 2 if ((len(r["trail"]) - i + f // 2) // 4) % 2 else 0
-            left, right = min(x1, x2) - 1, max(x1, x2) + 1
-            for k, col in enumerate(RAINBOW_TRAIL):
-                top = y1 - 6 + wave + k * 3
-                self.rect(left, top, right, top + 3, col)
+            wave = RIDER_SCALE if ((len(r["trail"]) - i + f // 2) // 4) % 2 else 0
+            left, right = min(x1, x2) - w / 2, max(x1, x2) - w / 2 + 1
+            top = y1 + h / 2 - h + wave
+            for row, col in KIRBY_TRAIL.items():
+                self.rect(left, top + row * RIDER_SCALE, right, top + (row + 1) * RIDER_SCALE, col)
         if f % 5 == 0:
-            self.particles.append({"kind": "sparkle", "x": x - 30, "y": y + random.uniform(-10, 14),
+            self.particles.append({"kind": "sparkle", "x": x - w / 2, "y": y + random.uniform(-6, 20),
                                    "vx": -0.5, "vy": 0, "life": 10, "gravity": False})
-        bob = math.sin(f * 0.5) * 2
-        self.msprite(MOTI_BLINK if f % 40 in (0, 1) else MOTI_RIDER, x + 4, y + 4 + bob, 2.5)
-        self.msprite(RIDE_STAR, x, y + 18 + bob, 2.5)
-        self.hits.append((x - 32, y - 26, x + 32, y + 20, self.rider_loop))
+        self.sprite(KIRBY_BLINK if f % 40 in (0, 1) else KIRBY, x, y + h / 2 + bob, RIDER_SCALE, pal=KIRBY_PAL)
+        self.hits.append((x - w / 2, y - h / 2, x + w / 2, y + h / 2, self.rider_loop))
         if x > W + 90:
             self.rider = None
 
