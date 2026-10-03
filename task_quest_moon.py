@@ -13,6 +13,7 @@ import tkinter as tk
 from tkinter import font as tkfont
 
 import pixel_tracker as pt
+from moon_art import LUNA_ALPH, LUNA_BODY, LUNA_COLORS, LUNA_TAIL, LUNA_TAIL_AT
 import task_quest_2000 as tq
 from pixel_tracker import HEART, SPARKLE, STAR, fmt_hms, lighten, mix, moon_cells
 
@@ -59,29 +60,6 @@ WING = [
     "..VVVVVVV.",
 ]
 
-# сиреневая кошечка с сердечком на лбу и бантиком
-KITTY = [
-    "..K..........K..",
-    ".KLK........KLK.",
-    ".KPLK......KLPK.",
-    ".KPLLKKKKKKLLPK.",
-    "KLLLLLRLRLLLLLLK",
-    "KLLLLLRRRLLLLLLK",
-    "KLLLLLLRLLLLLLLK",
-    "KLLWKLLLLLLWKLLK",
-    "KLLKKLLLLLLKKLLK",
-    "KLPPLLLKLLLLPPLK",
-    ".KLLLLKLKLLLLLK.",
-    "..KKPPKYKPPKKK..",
-    "...KLLLLLLLLK...",
-    "..KLLLLLLLLLLK..",
-    "..KLLlLLLLlLLK.K",
-    "..KLLlLLLLlLLKLK",
-    "..KLLKLLLLKLLLK.",
-    "...KKK.KK.KKKK..",
-]
-KITTY_SLEEP = KITTY[:7] + ["KLLLLLLLLLLLLLLK", "KLKKKLLLLLKKKLLK"] + KITTY[9:]
-KITTY_HAPPY = KITTY[:7] + ["KLLLKLLLLLLKLLLK", "KLLKLKLLLLKLKLLK"] + KITTY[9:]  # глазки «^ ^»
 PURR_FRAMES = 45  # ≈ 3.5 секунды мурчания
 
 # Кирби на звезде — точная копия присланной картинки (64×64, фон вырезан)
@@ -286,6 +264,28 @@ class HeartStack:
         return 0
 
 
+def art_image(rows, alph=LUNA_ALPH, colors=LUNA_COLORS):
+    """Собирает PhotoImage из строк пиксель-арта (прозрачные клетки — «.»)."""
+    lut = {ch: colors[k] for k, ch in enumerate(alph)}
+    img = tk.PhotoImage(width=len(rows[0]), height=len(rows))
+    for y, row in enumerate(rows):
+        x = 0
+        while x < len(row):
+            ch = row[x]
+            if ch == ".":
+                x += 1
+                continue
+            k = x
+            while k < len(row) and row[k] == ch:
+                k += 1
+            img.put(lut[ch], to=(x, y, k, y + 1))
+            x = k
+    return img
+
+
+LUNA_TOP = 252  # кошка стоит на дне правой нижней панели (y 392)
+
+
 def disk_cells(r):
     return [(i, j) for j in range(-r, r + 1) for i in range(-r, r + 1) if math.hypot(i, j) <= r + 0.3]
 
@@ -330,6 +330,7 @@ class AppMoon(tq.App2):
         self.idle_since = time.time()
         self.stack = HeartStack()
         self.purr_until = -1
+        self.luna_body, self.luna_tail = art_image(LUNA_BODY), art_image(LUNA_TAIL)
         self.rider = None
 
         self.load()
@@ -489,8 +490,8 @@ class AppMoon(tq.App2):
         self.cab_panel(l1, 268, l2, 396)
         r1, r2 = PANEL_R
         self.cab_panel(r1, 48, r2, 170, "NEXT")
-        self.cab_panel(r1, 174, r2, 262, "STATUS")
-        self.cab_panel(r1, 268, r2, 396)
+        self.cab_panel(r1, 174, r2, 226, "STATUS")
+        self.cab_panel(r1, 230, r2, 396)
 
         # стакан
         self.rect(WELL_X - 6, WELL_Y - 6, WELL_X + 10 * CELL + 6, WELL_Y + 17 * CELL + 6, M["frame"])
@@ -573,27 +574,10 @@ class AppMoon(tq.App2):
         self.draw_next(rx)
         if running:
             if (f // 6) % 2:
-                self.ptext("PLAY", rx, 204, 3, M["mint"], anchor="center", shadow=M["ink"])
-            self.ptext(">>", rx, 236, 2, M["mint"], anchor="center")
+                self.ptext("PLAY", rx, 200, 3, M["mint"], anchor="center", shadow=M["ink"])
         else:
-            self.ptext("PAUSE", rx, 204, 3, M["pink"], anchor="center", shadow=M["ink"])
-            self.ptext("ZZZ", rx, 236, 2, M["line"], anchor="center")
-        if f < self.purr_until:  # пасхалка: мурлычет, жмурится, вокруг парят сердечки
-            self.msprite(KITTY_HAPPY, rx + (1 if f % 2 else -1), 388, 3.5)
-            if f % 4 == 0:
-                self.particles.append({"kind": "float", "x": rx + random.uniform(-24, 24), "y": 330,
-                                       "vx": 0, "vy": -1.3, "life": 32, "gravity": False,
-                                       "ph": random.uniform(0, 6)})
-            if f % 15 == 0:
-                self.particles.append({"kind": "purr", "x": rx + random.choice((-20, 20)), "y": 318,
-                                       "vx": 0, "vy": -0.8, "life": 22, "gravity": False})
-        else:
-            kitty = KITTY_SLEEP if not running or f % 45 in (0, 1) else KITTY
-            self.msprite(kitty, rx, 388 + (math.sin(f * 0.3) * 2 if running else 0), 3.5)
-            if not running and f % 26 == 0:
-                self.particles.append({"kind": "z", "x": rx + 22, "y": 300, "vx": 0, "vy": -0.7, "life": 30})
-        self.hits.append((rx - 30, 322, rx + 30, 392, self.pet_kitty))
-
+            self.ptext("PAUSE", rx, 200, 3, M["pink"], anchor="center", shadow=M["ink"])
+        self.draw_luna(rx, running, f)
         self.draw_well(running, f)
 
         # бегущая строка с именем квеста
@@ -613,6 +597,28 @@ class AppMoon(tq.App2):
             self.xp_titlebar(x1, 180, x2, 200, "Quest Messenger", buttons=False)
             self.rect(x1, 200, x2, 240, M["xp_body"])
             self.uitext(W / 2, 220, self.toast[0], M["xp_text"], 12, True, anchor="center")
+
+    def draw_luna(self, rx, running, f):
+        """Чёрная кошка: дышит, покачивает хвостом, мурлычет по клику."""
+        purring = f < self.purr_until
+        dx = (1 if f % 2 else -1) if purring else 0
+        dy = -1 if (running and (f // 10) % 2) else 0
+        wag = round(math.sin(f * (0.35 if running or purring else 0.12)) * (2 if running or purring else 1))
+        x0, y0 = rx - len(LUNA_BODY[0]) / 2 + dx, LUNA_TOP + dy
+        self.cv.create_image(x0 + LUNA_TAIL_AT[0] + wag, y0 + LUNA_TAIL_AT[1], image=self.luna_tail,
+                             anchor="nw", tags=self.layer)
+        self.cv.create_image(x0, y0, image=self.luna_body, anchor="nw", tags=self.layer)
+        if purring:  # пасхалка: мурлычет, вокруг парят сердечки
+            if f % 4 == 0:
+                self.particles.append({"kind": "float", "x": rx + random.uniform(-40, 30), "y": 280,
+                                       "vx": 0, "vy": -1.3, "life": 32, "gravity": False,
+                                       "ph": random.uniform(0, 6)})
+            if f % 15 == 0:
+                self.particles.append({"kind": "purr", "x": rx + random.choice((-30, 30)), "y": 268,
+                                       "vx": 0, "vy": -0.8, "life": 22, "gravity": False})
+        elif not running and f % 26 == 0:
+            self.particles.append({"kind": "z", "x": rx + 30, "y": 262, "vx": 0, "vy": -0.7, "life": 30})
+        self.hits.append((rx - 57, LUNA_TOP, rx + 57, 392, self.pet_kitty))
 
     def start(self):
         super().start()
