@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Рисует иконку и собирает «Task Quest.app» (оба скина в одном приложении) рядом со скриптом.
+"""Рисует иконку и собирает «Task Quest.app» (все скины в одном приложении) рядом со скриптом.
 
 Запуск:  python3 build_app.py
 После этого приложение можно перетащить в «Программы» или в Dock.
@@ -16,7 +16,7 @@ import task_quest
 HERE = os.path.dirname(os.path.abspath(__file__))
 APPS = [
     # имя приложения, скрипт, функция иконки, id бандла, png-иконка для README
-    ("Task Quest", "task_quest.py", task_quest.icon_grid_combined, "local.taskquest", "icon.png"),
+    ("Task Quest", "task_quest.py", task_quest.icon_grid_universal, "local.taskquest", "icon.png"),
 ]
 
 INFO_PLIST = """<?xml version="1.0" encoding="UTF-8"?>

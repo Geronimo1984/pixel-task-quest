@@ -414,7 +414,8 @@ class App2(pt.App):
                                 tags=self.layer)
         self.cv.create_text(x, y, text=s, fill=color, font=self.font(size), anchor=anchor, tags=self.layer)
 
-    def sprite(self, rows, cx, bottom, sx=4.0, sy=None, color=None, flip=False, clip=None):
+    def sprite(self, rows, cx, bottom, sx=4.0, sy=None, color=None, flip=False, clip=None, pal=None):
+        pal = pal or P2
         sy = sy or sx
         w, h = len(rows[0]), len(rows)
         x0, y0 = cx - w * sx / 2, bottom - h * sy
@@ -431,7 +432,7 @@ class App2(pt.App):
                 while k < w and row[k] == ch:
                     k += 1
                 self.rect(round(x0 + i * sx), round(y0 + j * sy), round(x0 + k * sx), round(y0 + (j + 1) * sy),
-                          color or P2[ch], clip=clip)
+                          color or pal[ch], clip=clip)
                 i = k
 
     def ptext(self, s, x, y, scale, color, anchor="w", shadow=None):

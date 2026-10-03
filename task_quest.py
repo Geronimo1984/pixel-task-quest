@@ -4,6 +4,7 @@
 Скины:
   pixel — ночная пиксельная сцена с кошечкой Мяу-Луной (pixel_tracker.py)
   2000  — неоновый RPG-интерфейс, окошки Windows 98 и комната с призраком (task_quest_2000.py)
+  moon  — волшебная аркада с сердечками-блоками и мессенджер в духе Windows XP (task_quest_moon.py)
 
 Переключение — кнопка SKIN. Таймер, квесты и история при смене скина сохраняются,
 выбранный скин запоминается до следующего запуска.
@@ -11,21 +12,23 @@
 Запуск:  python3 task_quest.py
 """
 import json
+import math
 import sys
 import tkinter as tk
 
 import pixel_tracker as pt
 import task_quest_2000 as tq
-from pixel_tracker import C, mix, moon_cells
-from task_quest_2000 import FONT, N, P2, RINGS
+import task_quest_moon as tm
+from pixel_tracker import mix
+from task_quest_2000 import N
 
-SKINS = {"pixel": ("Pixel", pt.App), "2000": ("2000", tq.App2)}
+SKINS = {"pixel": ("Pixel", pt.App), "2000": ("2000", tq.App2), "moon": ("Moon", tm.AppMoon)}
 SKIN_ORDER = list(SKINS)
 
 
-# ── Общая иконка: слева ночной мир Pixel, справа мир 2000 ───────────────────
-def icon_grid_combined():
-    n, lo, hi, r = 128, 10, 117, 18
+# ── Общая иконка: пиксельный секундомер — то, что объединяет все скины ─────
+def icon_grid_universal():
+    n, lo, hi, r = 64, 5, 58, 9
 
     def inside(x, y, pad=0):
         a, b, rr = lo + pad, hi - pad, r - pad
@@ -34,80 +37,83 @@ def icon_grid_combined():
         cx, cy = min(max(x, a + rr), b - rr), min(max(y, a + rr), b - rr)
         return (x - cx) ** 2 + (y - cy) ** 2 <= rr * rr
 
-    def split(y):  # пиксельная «молния» между мирами
-        return 63 + (3 if (y // 6) % 2 else -3)
-
     g = [[None] * n for _ in range(n)]
     for y in range(n):
         for x in range(n):
             if not inside(x, y):
                 continue
-            right = x >= split(y)
-            if not inside(x, y, 4):
+            if not inside(x, y, 2):
                 g[y][x] = N["ink"]
-            elif not inside(x, y, 6):
-                g[y][x] = N["pink"] if right else C["yellow"]
-            elif y < 30:  # заголовок окна в духе Windows 98
-                g[y][x] = mix(N["title1"], N["title2"], (x - lo) / (hi - lo))
-            elif y < 32:
-                g[y][x] = N["ink"]
-            elif y < 98:
-                g[y][x] = (mix("#5b3fd1", "#8fd8ff", (y - 32) / 66) if right
-                           else mix("#3b2d85", "#1f1650", (y - 32) / 66))
-            elif right:
-                g[y][x] = "#ff4f8b" if (x // 4 + y // 4) % 2 else "#ff7aa8"
-            elif y < 104:
-                g[y][x] = C["grass"] if (x // 6) % 2 else C["grass2"]
-            else:
-                g[y][x] = C["dirt"] if (x // 6 + y // 6) % 2 else C["dirt2"]
+            else:  # диагональный градиент: ночь → лаванда → розовый
+                t = min(1, max(0, (x + y - 2 * lo) / (2 * (hi - lo))))
+                g[y][x] = mix("#2a1f6b", "#7a4fd0", t * 2) if t < 0.5 else mix("#7a4fd0", "#ff7ab8", (t - 0.5) * 2)
 
-    def put(x, y, col, s=2):
-        for dy in range(s):
-            for dx in range(s):
-                if g[y + dy][x + dx] not in (None, N["ink"]):
-                    g[y + dy][x + dx] = col
+    def put(x, y, col):
+        if 0 <= x < n and 0 <= y < n and g[y][x] is not None:
+            g[y][x] = col
 
-    def sprite(rows, x0, y0, s, pal):
-        for j, row in enumerate(rows):
-            for i, ch in enumerate(row):
-                if ch != "." and pal.get(ch):
-                    put(x0 + i * s, y0 + j * s, pal[ch], s)
-
-    # молния-разделитель
-    for y in range(32, 112):
-        x = split(y)
-        if inside(x, y, 6):
-            put(x - 1, y, C["text"], 1)
-    # заголовок: название и кнопки окна
-    cx = 20
-    for ch in "TASK QUEST":
-        glyph = FONT[ch]
-        for j, row in enumerate(glyph):
-            for i, px in enumerate(row):
-                if px == "#":
-                    put(cx + i, 19 + j, N["white"], 1)
-        cx += len(glyph[0]) + 1
-    for bx in (84, 93, 102):
-        for yy in range(18, 26):
-            for xx in range(bx, bx + 7):
-                g[yy][xx] = N["gray"]
-    # левый мир: луна и звёзды
-    for i, j in moon_cells(5, 3):
-        put(34 + i * 2, 36 + j * 2, C["yellow"])
-    for sx, sy in ((18, 40), (26, 58), (56, 44)):
-        put(sx, sy, C["yellow"])
-    for sx, sy in ((20, 76), (50, 36)):
-        for dx, dy in ((0, 0), (2, 0), (-2, 0), (0, 2), (0, -2)):
-            put(sx + dx, sy + dy, C["yellow"])
-    # правый мир: радужные пузыри
-    for (bx, by), rr in (((82, 44), 4), ((106, 40), 3), ((110, 64), 2)):
-        for i, j, col in RINGS[rr]:
-            put(bx + i * 2, by + j * 2, col)
-        put(bx - rr, by - rr, N["white"])
-    # герои: кошечка и призрак
-    sprite(pt.CAT_AWAKE, 16, 52, 3, pt.PALETTE)
-    sprite(tq.GHOST, 64, 52, 3, P2)
+    cx, cy, R = 31.5, 35.5, 18
+    # кнопка-заводная головка и боковая кнопка
+    for x in range(28, 36):
+        for y in range(10, 19):
+            put(x, y, N["ink"] if x in (28, 35) or y == 10 else N["pink"])
+    for x in range(30, 34):
+        put(x, 11, "#ffb3d9")
+    for x in range(44, 49):
+        for y in range(16, 21):
+            put(x, y, N["ink"] if x in (44, 48) or y in (16, 20) else N["pink"])
+    # корпус: обводка, неоновый ободок, циферблат
+    for y in range(n):
+        for x in range(n):
+            d = math.hypot(x - cx, y - cy)
+            if d <= R + 1.2:
+                if d > R:
+                    put(x, y, N["ink"])
+                elif d > R - 3:
+                    put(x, y, N["pink"] if (x - cx) + (y - cy) > -6 else "#ff9fd0")
+                elif d > R - 4:
+                    put(x, y, N["ink"])
+                else:
+                    put(x, y, "#e9e4ff" if (x - cx) + (y - cy) > 8 else "#fdfaff")
+    # деления на 12 / 3 / 6 / 9 и мелкие риски
+    for ang in range(0, 360, 30):
+        rad = math.radians(ang)
+        big = ang % 90 == 0
+        for k in ((10, 11, 12) if big else (12,)):
+            put(round(cx + k * math.sin(rad)), round(cy - k * math.cos(rad)), N["ink"] if big else "#9d8fd6")
+    # стрелки: минутная вверх, секундная розовая на «2 часа», центр
+    for k in range(1, 11):
+        put(31, round(cy) - k, N["ink"])
+        put(32, round(cy) - k, N["ink"])
+    for k in range(1, 12):
+        put(round(cx + k * math.sin(math.radians(60))), round(cy - k * math.cos(math.radians(60))), "#ff3d8b")
+    for dx in (-1, 0, 1):
+        for dy in (-1, 0, 1):
+            put(32 + dx, 36 + dy, N["ink"])
+    put(32, 36, N["yellow"])
+    # искорки и сердечко-значок
+    for sx, sy in ((12, 13), (53, 27), (11, 47)):
+        for dx, dy in ((0, 0), (1, 0), (-1, 0), (0, 1), (0, -1)):
+            put(sx + dx, sy + dy, N["yellow"])
+    for sx, sy in ((19, 20), (48, 54), (16, 33)):
+        put(sx, sy, "#ffffff")
+    for j, row in enumerate(HEART_BADGE):
+        for i, ch in enumerate(row):
+            if ch != ".":
+                put(42 + i, 41 + j, {"K": N["ink"], "R": "#ff3d8b", "W": "#ffffff"}[ch])
     return g
+
+
+HEART_BADGE = [
+    ".KKK.KKK.",
+    "KRRRKRRRK",
+    "KRWRRRRRK",
+    "KRRRRRRRK",
+    ".KRRRRRK.",
+    "..KRRRK..",
+    "...KRK...",
+    "....K....",
+]
 
 
 class Shell:
@@ -117,7 +123,7 @@ class Shell:
         self.root = root
         self.app = None
         try:
-            self.icon = pt.icon_photo(256, icon_grid_combined)
+            self.icon = pt.icon_photo(256, icon_grid_universal)
             root.iconphoto(True, self.icon)
         except tk.TclError:
             pass
