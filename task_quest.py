@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """Task Quest — ретро-трекер времени задач с переключаемыми скинами.
 
-Скины:
-  pixel — ночная пиксельная сцена с кошечкой Мяу-Луной (pixel_tracker.py)
-  2000  — неоновый RPG-интерфейс, окошки Windows 98 и комната с призраком (task_quest_2000.py)
+Скины (по умолчанию — moon):
   moon  — волшебная аркада с сердечками-блоками и мессенджер в духе Windows XP (task_quest_moon.py)
+  2000  — неоновый RPG-интерфейс, окошки Windows 98 и комната с призраком (task_quest_2000.py)
 
 Переключение — кнопка SKIN. Таймер, квесты и история при смене скина сохраняются,
 выбранный скин запоминается до следующего запуска.
@@ -22,7 +21,8 @@ import task_quest_moon as tm
 from pixel_tracker import mix
 from task_quest_2000 import N
 
-SKINS = {"pixel": ("Pixel", pt.App), "2000": ("2000", tq.App2), "moon": ("Moon", tm.AppMoon)}
+SKINS = {"moon": ("Moon", tm.AppMoon), "2000": ("2000", tq.App2)}  # порядок = порядок переключения
+DEFAULT_SKIN = "moon"
 SKIN_ORDER = list(SKINS)
 
 
@@ -127,7 +127,7 @@ class Shell:
             root.iconphoto(True, self.icon)
         except tk.TclError:
             pass
-        self.load_skin(skin if skin in SKINS else "pixel", first=True)
+        self.load_skin(skin if skin in SKINS else DEFAULT_SKIN, first=True)
 
     def load_skin(self, name, first=False):
         topmost = False
@@ -144,7 +144,9 @@ class Shell:
             self.app.show_toast(f"Скин: {SKINS[name][0]} ✓", 25)
 
     def next_skin(self):
-        cur = self.app.data.get("skin", "pixel")
+        cur = self.app.data.get("skin", DEFAULT_SKIN)
+        if cur not in SKINS:
+            cur = DEFAULT_SKIN
         nxt = SKIN_ORDER[(SKIN_ORDER.index(cur) + 1) % len(SKIN_ORDER)]
         # меняем после обработки клика, чтобы не удалять холст посреди его же события
         self.root.after_idle(lambda: self.load_skin(nxt))
@@ -153,9 +155,9 @@ class Shell:
 def saved_skin():
     try:
         with open(pt.DATA_FILE, encoding="utf-8") as fh:
-            return json.load(fh).get("skin", "pixel")
+            return json.load(fh).get("skin", DEFAULT_SKIN)
     except (OSError, ValueError):
-        return "pixel"
+        return DEFAULT_SKIN
 
 
 def main(skin=None):
