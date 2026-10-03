@@ -307,7 +307,9 @@ def disk_cells(r):
     return [(i, j) for j in range(-r, r + 1) for i in range(-r, r + 1) if math.hypot(i, j) <= r + 0.3]
 
 
-DISKS = {r: disk_cells(r) for r in (4, 5, 7, 9)}
+DISKS = {r: disk_cells(r) for r in (4, 5, 6, 7, 9)}
+PILL = (164, 278)             # концы большой кнопки START/STOP
+ROUND_X0, ROUND_STEP = 319, 32  # круглые кнопки пульта
 
 WELL_X, WELL_Y, CELL = 140, 50, 20       # стакан 10×17 клеток
 PANEL_L, PANEL_R = (18, 126), (354, 462)  # колонки автомата
@@ -432,10 +434,10 @@ class AppMoon(tq.App2):
             self.rect(cx + i * s - s / 2, cy + j * s - s / 2, cx + i * s + s / 2, cy + j * s + s / 2, color)
 
     def round_button(self, cx, cy, color, down=False):
-        self.disk(cx, cy, 5, 2, pt.App.darken(color, 0.4))
-        self.disk(cx, cy + (1 if down else 0), 4, 2, pt.App.darken(color, 0.15) if down else color)
+        self.disk(cx, cy, 6, 2, pt.App.darken(color, 0.45))
+        self.disk(cx, cy + (1 if down else 0), 5, 2, pt.App.darken(color, 0.15) if down else color)
         if not down:
-            self.rect(cx - 5, cy - 6, cx - 1, cy - 2, lighten(color, 0.6))
+            self.rect(cx - 6, cy - 8, cx - 1, cy - 3, lighten(color, 0.6))
 
     def block(self, x, y, color, s=CELL):
         self.rect(x, y, x + s, y + s, pt.App.darken(color, 0.4))
@@ -549,7 +551,7 @@ class AppMoon(tq.App2):
         self.msprite(WING, 87, 452, 1.5, flip=True)
         self.msprite(WING, 125, 452, 1.5)
         for i, (_, label, _) in enumerate(ROUND_BTNS):
-            self.ptext(label, 352 + i * 25, 456, 1, T["btn"], anchor="center")
+            self.uitext(ROUND_X0 + i * ROUND_STEP, 461, label, T["btn"], 9, True, anchor="center")
 
         # окно мессенджера
         x1, y1, x2, y2 = XP
@@ -875,25 +877,27 @@ class AppMoon(tq.App2):
         if down:
             col = pt.App.darken(col, 0.2)
         o = 2 if down else 0
-        self.disk(166, 447 + o, 7, 2, pt.App.darken(col, 0.35))
-        self.disk(314, 447 + o, 7, 2, pt.App.darken(col, 0.35))
-        self.rect(166, 433 + o, 314, 462 + o, pt.App.darken(col, 0.35))
-        self.rect(166, 435 + o, 314, 459 + o, col)
-        self.disk(167, 447 + o, 5, 2, col)
-        self.disk(313, 447 + o, 5, 2, col)
-        self.rect(170, 437 + o, 310, 440 + o, lighten(col, 0.5))
-        self.ptext("STOP" if running else "START", 240, 440 + o, 2, M["white"], anchor="center", shadow=M["ink"])
-        self.hits.append((152, 430, 328, 466, self.toggle))
+        l, r = PILL
+        self.disk(l, 447 + o, 7, 2, pt.App.darken(col, 0.35))
+        self.disk(r, 447 + o, 7, 2, pt.App.darken(col, 0.35))
+        self.rect(l, 433 + o, r, 462 + o, pt.App.darken(col, 0.35))
+        self.rect(l, 435 + o, r, 459 + o, col)
+        self.disk(l + 1, 447 + o, 5, 2, col)
+        self.disk(r - 1, 447 + o, 5, 2, col)
+        self.rect(l + 4, 437 + o, r - 4, 439 + o, lighten(col, 0.5))
+        self.ptext("STOP" if running else "START", (l + r) / 2, 437 + o, 3, M["white"], anchor="center",
+                   shadow=M["ink"])
+        self.hits.append((l - 14, 430, r + 14, 466, self.toggle))
 
         actions = {"csv": self.export_csv, "top": self.toggle_top, "fx": self.toggle_fx,
                    "clear": self.clear_tasks, "skin": self.switch_skin}
         states = {"top": self.topmost, "fx": self.data["fx"]}
         for i, (name, _, color) in enumerate(ROUND_BTNS):
-            bx = 352 + i * 25
-            self.round_button(bx, 442, color, self.pressed.get(name, -1) >= self.f)
+            bx = ROUND_X0 + i * ROUND_STEP
+            self.round_button(bx, 441, color, self.pressed.get(name, -1) >= self.f)
             if name in states:
-                self.rect(bx + 6, 431, bx + 10, 435, M["mint"] if states[name] else M["body_d"])
-            self.hits.append((bx - 12, 430, bx + 12, 464, actions[name]))
+                self.rect(bx + 8, 429, bx + 13, 434, M["mint"] if states[name] else M["body_d"])
+            self.hits.append((bx - 15, 428, bx + 15, 466, actions[name]))
 
     def draw_messenger(self, running, f, today):
         # кнопка «Добавить» в стиле XP
