@@ -6,3 +6,4 @@ tracker_data.json.*
 *.iconset
 __pycache__/
 .DS_Store
+tracker_backup_*.json

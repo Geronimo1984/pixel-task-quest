@@ -503,6 +503,28 @@ class App:
         self.scroll_by(0)
         self.save()
 
+    def clear_tasks(self):
+        self.press("clear")
+        n = len(self.data["tasks"])
+        if not n:
+            self.show_toast("Список и так пуст", 20)
+            return
+        if not messagebox.askyesno(
+                "Очистить список",
+                f"Удалить все квесты ({n}) вместе с историей времени?\n\n"
+                "Перед очисткой я сохраню резервную копию рядом с программой."):
+            return
+        backup = os.path.join(os.path.dirname(DATA_FILE),
+                              f"tracker_backup_{datetime.now():%Y-%m-%d_%H-%M-%S}.json")
+        with open(backup, "w", encoding="utf-8") as fh:
+            json.dump(self.data, fh, ensure_ascii=False, indent=1)
+        self.data.update(tasks=[], sessions=[], running=None, selected=None)
+        self.recompute()
+        self.scroll = 0
+        self.save()
+        self.burst("sparkle", 240, 140, 16)
+        self.show_toast("Список очищен ✓ копия сохранена", 40)
+
     def export_csv(self):
         self.press("csv")
         path = os.path.join(os.path.expanduser("~/Desktop"), f"pixel_tracker_{date.today():%Y-%m-%d}.csv")
@@ -655,8 +677,9 @@ class App:
         if not down:
             self.rect(x1 + 4, y1 + 4, x2 + 4, y2 + 4, C["ink"])
         self.rect(x1 + o, y1 + o, x2 + o, y2 + o, color, C["ink"], 3)
-        self.rect(x1 + o + 5, y1 + o + 5, x2 + o - 5, y1 + o + 9, lighten(color, 0.45))
-        self.rect(x1 + o + 5, y2 + o - 7, x2 + o - 5, y2 + o - 4, self.darken(color))
+        if y2 - y1 >= 30:  # на низких кнопках блики налезали бы на текст
+            self.rect(x1 + o + 5, y1 + o + 5, x2 + o - 5, y1 + o + 9, lighten(color, 0.45))
+            self.rect(x1 + o + 5, y2 + o - 7, x2 + o - 5, y2 + o - 4, self.darken(color))
         self.text((x1 + x2) / 2 + o, (y1 + y2) / 2 + o, label, fg, size, shadow=None)
         self.hits.append((x1, y1, x2 + 4, y2 + 4, cb))
 
@@ -884,6 +907,8 @@ class App:
         # ── список ──
         self.text(26, 492, "КВЕСТЫ", C["pink"], 12, anchor="w")
         self.text(410, 492, "ВРЕМЯ", C["pink"], 12, anchor="e")
+        if self.data["tasks"]:
+            self.button("clear", 112, 481, 222, 503, "ОЧИСТИТЬ", C["red"], self.clear_tasks, 10)
         tasks = self.data["tasks"]
         if not tasks:
             self.text(W / 2, self.LIST_TOP + 60, "пока пусто… добавь квест выше ↑", C["dim"], 12)
