@@ -101,7 +101,9 @@ KIRBY_BLINK = KIRBY[:6] + [
 ] + KIRBY[9:]
 KIRBY_TRAIL = {21: "#ddd702", 22: "#ddd702", 23: "#4b9c15", 24: "#4b9c15", 25: "#026fc5", 26: "#026fc5", 27: "#6a3175", 28: "#6a3175"}  # ряды радуги
 RIDER_SCALE = 2
-CINNA_EVERY = 320  # кадров между пролётами Синнаморола (≈ 25 секунд)
+CINNA_PAUSE = 36  # кадров между пролётами Синнаморола (≈ 3 секунды)
+CINNA_LANE = 728  # высота полёта — в подвале экрана, над строкой статуса и ночным городом
+CINNA_LOOP = (24, 0.13)  # радиус петли и скорость вращения: петля, пока вращение быстрее полёта вперёд
 KIRBY_CENTER = (424, 316)  # Кирби мчится на звезде в правой нижней панели
 KIRBY_HOP = 18  # кадров прыжка по клику
 
@@ -720,7 +722,9 @@ class AppMoon(tq.App2):
 
     def launch_cinna(self):
         if self.cinna is None and self.cinna_img and self.data["fx"]:
-            self.cinna = {"x": W + 50.0, "base": random.choice((150, 330)), "hearts": -1,
+            self.cinna_dir = -getattr(self, "cinna_dir", 1)  # туда-обратно по очереди
+            self.cinna = {"x": W + 60.0 if self.cinna_dir < 0 else -60.0, "base": CINNA_LANE, "hearts": -1,
+                          "phase": 0.0, "pos": (0, CINNA_LANE),
                           "bubbles": [{"a": k / CINNA_BUBBLES * math.tau + random.uniform(-0.12, 0.12),
                                        "d": random.uniform(CINNA_R - 9, CINNA_R + 2),
                                        "r": random.choice((2, 3, 3, 4, 4, 5, 5, 6, 7)),
@@ -729,17 +733,25 @@ class AppMoon(tq.App2):
     def poke_cinna(self):
         if self.cinna:
             self.cinna["hearts"] = self.f + 16
-            self.burst("heart", self.cinna["x"], self.cinna["base"], 10)
+            self.burst("heart", *self.cinna["pos"], 10)
 
     def draw_cinna(self, running, f):
-        """Синнаморол в пузыре: пролетает справа налево, покачиваясь и моргая."""
+        """Синнаморол в пузыре летает петлями по подвалу экрана — туда и обратно, моргая."""
         if self.cinna is None:
-            if f % CINNA_EVERY == 0:
+            self.cinna_wait = getattr(self, "cinna_wait", 0) + 1
+            if self.cinna_wait > CINNA_PAUSE:
+                self.cinna_wait = 0
                 self.launch_cinna()
             return
         c = self.cinna
-        c["x"] -= 2.4 * (1.3 if running else 1)
-        x, y = c["x"], c["base"] + math.sin(f * 0.12) * 10
+        boost = 1.3 if running else 1
+        c["x"] += 2.0 * boost * self.cinna_dir
+        c["phase"] += CINNA_LOOP[1] * boost
+        # петля: вращение по кругу поверх движения вперёд (в сторону полёта)
+        r = CINNA_LOOP[0]
+        x = round(c["x"] - math.sin(c["phase"]) * r * self.cinna_dir)
+        y = round(c["base"] - (1 - math.cos(c["phase"])) * r)
+        c["pos"] = (x, y)
         x0, y0 = x - CINNA_R, y - CINNA_R
         self.cv.create_image(x0, y0, image=self.cinna_img, anchor="nw", tags=self.layer)
         if f % 50 in (0, 1, 2) or f < c["hearts"]:
@@ -762,7 +774,7 @@ class AppMoon(tq.App2):
                                    "y": round(y + math.sin(a) * CINNA_R), "vx": 0.5, "vy": -0.7,
                                    "r": random.choice((2, 3, 3, 4)), "life": 34, "gravity": False})
         self.hits.append((x - CINNA_R, y - CINNA_R, x + CINNA_R, y + CINNA_R, self.poke_cinna))
-        if x < -60:
+        if (self.cinna_dir < 0 and c["x"] < -70) or (self.cinna_dir > 0 and c["x"] > W + 70):
             self.cinna = None
 
     def draw_sailor(self, f):
