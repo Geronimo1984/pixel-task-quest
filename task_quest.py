@@ -5,6 +5,7 @@
   moon  — волшебная аркада с сердечками-блоками и мессенджер в духе Windows XP (task_quest_moon.py)
   2000  — неоновый RPG-интерфейс, окошки Windows 98 и комната с призраком (task_quest_2000.py)
   term  — зелёный фосфорный терминал с падающими символами и полутоновым глазом (task_quest_terminal.py)
+  player — плеер K-Jofol с вращающимися дисками Kirby Air Ride, Bratz и Resident Evil 4 (task_quest_player.py)
 
 Переключение — кнопка SKIN. Таймер, квесты и история при смене скина сохраняются,
 выбранный скин запоминается до следующего запуска.
@@ -20,10 +21,12 @@ import pixel_tracker as pt
 import task_quest_2000 as tq
 import task_quest_moon as tm
 import task_quest_terminal as tt
+import task_quest_player as tp
 from pixel_tracker import mix
 from task_quest_2000 import N
 
-SKINS = {"moon": ("Moon", tm.AppMoon), "2000": ("2000", tq.App2), "term": ("Terminal", tt.AppTerminal)}  # порядок = порядок переключения
+SKINS = {"moon": ("Moon", tm.AppMoon), "2000": ("2000", tq.App2), "term": ("Terminal", tt.AppTerminal),
+         "player": ("Player", tp.AppPlayer)}  # порядок = порядок переключения
 DEFAULT_SKIN = "moon"
 SKIN_ORDER = list(SKINS)
 
