@@ -102,8 +102,8 @@ KIRBY_BLINK = KIRBY[:6] + [
 KIRBY_TRAIL = {21: "#ddd702", 22: "#ddd702", 23: "#4b9c15", 24: "#4b9c15", 25: "#026fc5", 26: "#026fc5", 27: "#6a3175", 28: "#6a3175"}  # ряды радуги
 RIDER_SCALE = 2
 CINNA_PAUSE = 36  # кадров между пролётами Синнаморола (≈ 3 секунды)
-CINNA_LANE = 728  # высота полёта — в подвале экрана, над строкой статуса и ночным городом
-CINNA_LOOP = (24, 0.13)  # радиус петли и скорость вращения: петля, пока вращение быстрее полёта вперёд
+CINNA_LANE = 740  # высота полёта — в подвале экрана, над строкой статуса и ночным городом
+CINNA_LOOP = (16, 0.13)  # радиус петли и скорость вращения: петля, пока вращение быстрее полёта вперёд
 KIRBY_CENTER = (424, 316)  # Кирби мчится на звезде в правой нижней панели
 KIRBY_HOP = 18  # кадров прыжка по клику
 
@@ -279,14 +279,13 @@ KITTY_EYES = [(36, 56), (38, 56), (35, 57), (36, 57), (38, 57), (39, 57), (36, 5
 KITTY_LIDS = [(35, 59, 40, 60), (63, 56, 68, 57)]  # закрытые глазки — тонкие чёрточки
 KITTY_SPARKS = [(11, 25), (89, 34)]
 
-# Синнаморол — круглый кадр (радиус 45) с облачком; края растворяются в мыльных пузырях
-CINNA_R = 45
-CINNA_EYES = [(32, 29), (33, 29), (32, 30), (33, 30), (34, 30), (31, 31), (32, 31), (33, 31), (34, 31), (31, 32),
-              (32, 32), (33, 32), (34, 32), (51, 27), (52, 27), (51, 28), (52, 28), (53, 28), (50, 29), (51, 29),
-              (52, 29), (53, 29), (50, 30), (51, 30), (52, 30), (53, 30)]
-CINNA_EYES = [(i + 5, j + 5) for i, j in CINNA_EYES]  # координаты сняты с кадра радиусом 40
-CINNA_LIDS = [(36, 36, 40, 37), (55, 34, 59, 35)]
-CINNA_BUBBLES = 20  # пузырей по контуру
+# Синнаморол — круглый кадр (радиус 30, в 1,5 раза меньше исходного) с облачком;
+# края растворяются в мыльных пузырях
+CINNA_R = 30
+CINNA_EYES = [(37, 21), (38, 21), (37, 22), (38, 22), (25, 23), (26, 23), (37, 23), (38, 23), (24, 24), (25, 24),
+              (26, 24)]
+CINNA_LIDS = [(24, 24, 27, 25), (36, 23, 39, 24)]
+CINNA_BUBBLES = 16  # пузырей по контуру
 
 # Сейлор Мун — появляется в стакане, когда сессия завершена или новый уровень
 SAILOR_FRAMES = 64  # ≈ 5 секунд
@@ -726,8 +725,8 @@ class AppMoon(tq.App2):
             self.cinna = {"x": W + 60.0 if self.cinna_dir < 0 else -60.0, "base": CINNA_LANE, "hearts": -1,
                           "phase": 0.0, "pos": (0, CINNA_LANE),
                           "bubbles": [{"a": k / CINNA_BUBBLES * math.tau + random.uniform(-0.12, 0.12),
-                                       "d": random.uniform(CINNA_R - 9, CINNA_R + 2),
-                                       "r": random.choice((2, 3, 3, 4, 4, 5, 5, 6, 7)),
+                                       "d": random.uniform(CINNA_R - 6, CINNA_R + 1),
+                                       "r": random.choice((2, 2, 3, 3, 3, 4, 4, 5)),
                                        "ph": random.uniform(0, math.tau)} for k in range(CINNA_BUBBLES)]}
 
     def poke_cinna(self):
@@ -745,7 +744,7 @@ class AppMoon(tq.App2):
             return
         c = self.cinna
         boost = 1.3 if running else 1
-        c["x"] += 2.0 * boost * self.cinna_dir
+        c["x"] += 1.35 * boost * self.cinna_dir
         c["phase"] += CINNA_LOOP[1] * boost
         # петля: вращение по кругу поверх движения вперёд (в сторону полёта)
         r = CINNA_LOOP[0]
@@ -762,8 +761,8 @@ class AppMoon(tq.App2):
         # мыльные пузыри по растворённому краю: кружат, дышат, иногда отрываются и улетают
         for b in c["bubbles"]:
             a = b["a"] + f * 0.012
-            d = b["d"] + math.sin(f * 0.11 + b["ph"]) * 2.5
-            r = max(2, min(7, b["r"] + round(math.sin(f * 0.08 + b["ph"]))))
+            d = b["d"] + math.sin(f * 0.11 + b["ph"]) * 1.7
+            r = max(2, min(5, b["r"] + round(math.sin(f * 0.08 + b["ph"]))))
             bx, by = round(x + math.cos(a) * d), round(y + math.sin(a) * d)
             for i, j, col in tq.RINGS[r]:
                 self.rect(bx + i, by + j, bx + i + 1, by + j + 1, col)
@@ -772,7 +771,7 @@ class AppMoon(tq.App2):
             a = random.uniform(0, math.tau)
             self.particles.append({"kind": "bubble", "x": round(x + math.cos(a) * CINNA_R),
                                    "y": round(y + math.sin(a) * CINNA_R), "vx": 0.5, "vy": -0.7,
-                                   "r": random.choice((2, 3, 3, 4)), "life": 34, "gravity": False})
+                                   "r": random.choice((2, 2, 3)), "life": 30, "gravity": False})
         self.hits.append((x - CINNA_R, y - CINNA_R, x + CINNA_R, y + CINNA_R, self.poke_cinna))
         if (self.cinna_dir < 0 and c["x"] < -70) or (self.cinna_dir > 0 and c["x"] > W + 70):
             self.cinna = None
