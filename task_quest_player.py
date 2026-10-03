@@ -24,6 +24,9 @@ from pixel_tracker import fmt_hms
 
 W, H = 480, 740
 TILE = 160
+FLOAT_AT = (-190, 205)      # парящий наклонный 3D-диск — слева от плеера (координаты от угла плеера)
+FLOAT_FRAMES = 24
+DRIVE_BOX = 188             # окошко верхнего привода: диск 168 + ободок
 ASSETS = os.path.join(pt.APP_DIR, "assets")
 FOCUS_SEC = 25 * 60
 DAY_GOAL_SEC = 8 * 3600
@@ -83,6 +86,50 @@ ROUND_BTNS = {
     "green": ((343, 135), 22), "dock": ((350, 47), 12),
     "close": ((432, 170), 9), "close2": ((392, 332), 9),
 }
+
+
+class Overlay:
+    """Маленькое прозрачное окно без рамки поверх плеера; ездит вместе с ним."""
+
+    def __init__(self, app, x, y, w, h, click=None, hint=None):
+        self.app, self.x, self.y, self.w, self.h = app, x, y, w, h
+        self.top = top = tk.Toplevel(app.root)
+        top.withdraw()
+        top.overrideredirect(True)
+        top.wm_attributes("-transparent", True)
+        top.configure(bg="systemTransparent")
+        self.cv = tk.Canvas(top, width=w, height=h, bg="systemTransparent", highlightthickness=0)
+        self.cv.pack()
+
+        def press(e):
+            if click:
+                click()
+            else:   # клик мимо кнопок — тащим весь плеер
+                app.drag = (e.x_root - app.root.winfo_x(), e.y_root - app.root.winfo_y())
+        self.cv.bind("<Button-1>", press)
+        self.cv.bind("<B1-Motion>", app.on_drag)
+        self.cv.bind("<ButtonRelease-1>", lambda e: setattr(app, "drag", None))
+        if hint:
+            self.cv.bind("<Enter>", lambda e: setattr(app, "hint", hint))
+            self.cv.bind("<Leave>", lambda e: setattr(app, "hint", None))
+        self.place()
+        top.deiconify()
+
+    def layer_bezel(self, cx, cy, r):
+        cv = self.cv
+        cv.create_oval(cx - r - 9, cy - r - 9, cx + r + 9, cy + r + 9, fill="#0b0c0b", outline="")
+        for k, col in enumerate(BEZEL):
+            rr = r + 8 - k
+            cv.create_oval(cx - rr, cy - rr, cx + rr, cy + rr, outline=col, width=1.4)
+        cv.create_oval(cx - r - 1, cy - r - 1, cx + r + 1, cy + r + 1, fill="#050605", outline="")
+
+    def place(self):
+        r = self.app.root
+        self.top.geometry(f"{self.w}x{self.h}+{r.winfo_rootx() + self.x}+{r.winfo_rooty() + self.y}")
+        self.top.lift()
+
+    def destroy(self):
+        self.top.destroy()
 
 
 class AppPlayer(tq.App2):
@@ -159,6 +206,14 @@ class AppPlayer(tq.App2):
                 self.cv.create_rectangle(x1, y1, x2, y2, fill="#000000", outline="", tags="static")
         for tx, ty, tile in self.bg_tiles:   # картинка плеера поверх силуэта — один раз
             self.cv.create_image(tx, ty, image=tile, anchor="nw", tags="static")
+        fstrip = tk.PhotoImage(file=os.path.join(ASSETS, "disc_float.png"))
+        size = fstrip.height()
+        self.float_frames = []
+        for k in range(FLOAT_FRAMES):
+            fr = tk.PhotoImage(width=size, height=size)
+            fr.tk.call(fr, "copy", fstrip, "-from", k * size, 0, (k + 1) * size, size)
+            self.float_frames.append(fr)
+        self.float_size, self.float_frame, self.hover = size, 0, None
         self.keys, self.sec_hits = {}, {}
 
         self.load()
@@ -171,12 +226,13 @@ class AppPlayer(tq.App2):
         self.cv.bind("<B1-Motion>", self.on_drag)
         self.cv.bind("<ButtonRelease-1>", lambda e: setattr(self, "drag", None))
         self.cv.bind("<Motion>", self.on_motion)
-        self.cv.bind("<Leave>", lambda e: setattr(self, "hint", None))
+        self.cv.bind("<Leave>", lambda e: (setattr(self, "hint", None), setattr(self, "hover", None)))
         self.cv.bind("<MouseWheel>", self.on_wheel)
         self.cv.bind("<Button-4>", lambda e: self.scroll_by(-1))
         self.cv.bind("<Button-5>", lambda e: self.scroll_by(1))
         root.bind("<space>", self.on_space)
         root.protocol("WM_DELETE_WINDOW", self.on_close)
+        self.make_overlays()
 
         if not self.data["tasks"]:
             self.show_toast("«добавить» — новый квест", 80)
@@ -184,9 +240,52 @@ class AppPlayer(tq.App2):
             self.show_toast("с возвращением ♥", 50)
         self.tick()
 
+    # ── окошки поверх плеера: всё, что меняется каждый кадр ─────────────────
+    # macOS при любом изменении перерисовывает прозрачное окно целиком (~35 мс у плеера),
+    # поэтому крутящийся диск, эквалайзер и парящий диск живут в своих маленьких окнах
+    def make_overlays(self):
+        self.root.update_idletasks()
+        cx, cy = DRIVE_TOP
+        # верхний привод: ободок один раз, кадр диска меняется
+        self.ov_disc = Overlay(self, cx - DRIVE_BOX // 2, cy - DRIVE_BOX // 2, DRIVE_BOX, DRIVE_BOX,
+                               click=self.scratch, hint=HINTS["disc"])
+        c = DRIVE_BOX // 2
+        self.ov_disc.layer_bezel(c, c, DISC_BIG // 2)
+        self.ov_disc_img = self.ov_disc.cv.create_image(c, c)
+        # эквалайзер: кусок LCD с картинки как фон, столбики поверх
+        x1, y1, x2, y2 = EQ_BARS
+        self.ov_eq = Overlay(self, x1, y1, x2 - x1, y2 - y1)
+        self.eq_bg = tk.PhotoImage(width=x2 - x1, height=y2 - y1)
+        self.eq_bg.tk.call(self.eq_bg, "copy", self.bg, "-from", x1, y1, x2, y2)
+        self.ov_eq.cv.create_rectangle(0, 0, x2 - x1, y2 - y1, fill="#000000", outline="")
+        self.ov_eq.cv.create_image(0, 0, image=self.eq_bg, anchor="nw")
+        # парящий наклонный диск: подложка-силуэт и кадр вращения
+        fx, fy = FLOAT_AT
+        self.ov_float = Overlay(self, fx, fy, self.float_size, self.float_size, click=self.scratch,
+                                hint=HINTS["disc"])
+        with open(os.path.join(ASSETS, "disc_float_mask.json"), encoding="utf-8") as fh:
+            for a, b, c2, d in json.load(fh):
+                self.ov_float.cv.create_rectangle(a, b, c2, d, fill="#000000", outline="")
+        self.ov_float_img = self.ov_float.cv.create_image(0, 0, anchor="nw")
+        self.overlays = [self.ov_disc, self.ov_eq, self.ov_float]
+        self.ov_state = {}
+
+    def toggle_top(self):
+        super().toggle_top()
+        for ov in getattr(self, "overlays", []):
+            ov.top.attributes("-topmost", self.topmost)
+
+    def place_overlays(self):
+        self.root.update_idletasks()
+        for ov in getattr(self, "overlays", []):
+            ov.place()
+
     def teardown(self):
         if getattr(self, "_after", None):
             self.root.after_cancel(self._after)
+        for ov in getattr(self, "overlays", []):
+            ov.destroy()
+        self.overlays = []
         self.cv.destroy()
         # возвращаем обычное окно для других скинов
         root = self.root
@@ -199,8 +298,11 @@ class AppPlayer(tq.App2):
         """Клик по кнопке — действие, по корпусу плеера — начать перетаскивание окна."""
         self.root.focus_force()
         self.cv.focus_set()
+        for ov in getattr(self, "overlays", []):
+            ov.top.lift()   # окошки всегда поверх плеера
+        x, y = self.cv.canvasx(e.x), self.cv.canvasy(e.y)
         for x1, y1, x2, y2, cb in reversed(self.hits):
-            if x1 <= e.x <= x2 and y1 <= e.y <= y2:
+            if x1 <= x <= x2 and y1 <= y <= y2:
                 cb()
                 return
         self.drag = (e.x_root - self.root.winfo_x(), e.y_root - self.root.winfo_y())
@@ -208,15 +310,20 @@ class AppPlayer(tq.App2):
     def on_drag(self, e):
         if self.drag:
             self.root.geometry(f"+{e.x_root - self.drag[0]}+{e.y_root - self.drag[1]}")
+            self.place_overlays()   # окошки едут вместе с плеером
 
     def on_motion(self, e):
-        """Подсказка на LCD: что делает кнопка под мышкой."""
-        self.hint = None
+        """Подсказка на LCD и подсветка кнопки под мышкой — в стиле старых меню."""
+        x, y = self.cv.canvasx(e.x), self.cv.canvasy(e.y)
+        self.hint = self.hover = None
         for name, ((cx, cy), r) in ROUND_BTNS.items():
-            if abs(e.x - cx) <= r and abs(e.y - cy) <= r:
-                self.hint = HINTS.get(name)
+            if abs(x - cx) <= r and abs(y - cy) <= r:
+                self.hint, self.hover = HINTS.get(name), ("round", name)
+        for name, by, _ in SIDE_BTNS:
+            if 398 <= x <= 468 and by - 9 <= y <= by + 9:
+                self.hover = ("side", name)
         dx, dy = DRIVE_TOP
-        if math.hypot(e.x - dx, e.y - dy) <= DISC_BIG / 2:
+        if math.hypot(x - dx, y - dy) <= DISC_BIG / 2:
             self.hint = HINTS["disc"]
 
     # ── действия ──────────────────────────────────────────────────────────
@@ -308,7 +415,7 @@ class AppPlayer(tq.App2):
         self.cv.create_text((x1 + x2) / 2, (y1 + y2) / 2, text=text, fill=color, font=font, tags=self.layer)
 
     # части интерфейса снизу вверх; каждая перерисовывается, только когда изменилось её содержимое
-    ORDER = ("arc", "eq", "lcd", "list", "info", "side", "press", "bezel", "disc", "fx")
+    ORDER = ("arc", "lcd", "list", "info", "side", "press", "hover", "bezel", "disc", "fx")
 
     def section(self, name, key, draw):
         if self.keys.get(name) == key:
@@ -343,17 +450,17 @@ class AppPlayer(tq.App2):
 
         # анимации обновляем через кадр: на прозрачном окне macOS любое изменение перерисовывает
         # окно целиком (~35 мс), поэтому все изменения собираем на чётные кадры
-        anim = f % 2 == 0
+        anim = running or f % 2 == 0   # во время работы — каждый кадр, чтобы диски крутились плавно
         # эквалайзер: танцует, пока идёт работа, на паузе затихает и замирает
         live = running and self.data["fx"]
         for i in range(len(self.eq) if anim else 0):
             target = (0.35 + 0.6 * random.random() * (0.6 + 0.4 * math.sin(f * 0.3 + i))) if live else 0.08
             self.eq[i] += (target - self.eq[i]) * 0.45
-        self.section("eq", tuple(int(h * 16) for h in self.eq), self.draw_eq)
+        self.ov_update("eq", tuple(int(h * 16) for h in self.eq), self.draw_eq)
 
         # LCD: время, статус, квест (или подсказка/сообщение), уровень и день
         shown = self.session_elapsed() if running else (self.task_total(sel["id"]) if sel else 0)
-        status = ("▶ идёт работа" if (f // 8) % 2 else "▶") if running else ("❚❚ пауза" if sel else "нет квеста")
+        status = ("▶ идёт работа" if (f // 12) % 2 else "▶") if running else ("❚❚ пауза" if sel else "нет квеста")
         if not anim and "lcd" in self.keys:
             status = self.keys["lcd"][1]
         if self.hint:
@@ -374,7 +481,7 @@ class AppPlayer(tq.App2):
         rows = tuple((t["id"], t["name"], int(self.task_total(t["id"])), t["id"] == self.data["selected"],
                       bool(running and running["task_id"] == t["id"]))
                      for t in tasks[self.scroll:self.scroll + self.ROWS])
-        self.section("list", (self.scroll, rows, (f // 6) % 2 if running else 0),
+        self.section("list", (self.scroll, rows, (f // 12) % 2 if running else 0),
                      lambda: self.draw_playlist(running, f))
 
         info = (f"сессия {fmt_hms(self.session_elapsed())} · день {fmt_hms(today)}",
@@ -397,22 +504,57 @@ class AppPlayer(tq.App2):
             self.disc_frame = (self.disc_frame - 3) % DISC_FRAMES   # скретч назад
         elif running:
             self.disc_frame = (self.disc_frame + 1) % DISC_FRAMES
-        self.section("bezel", 1, lambda: (self.drive_bezel(*DRIVE_TOP, DISC_BIG // 2),
-                                          self.drive_bezel(*DRIVE_BOTTOM, DISC_SMALL // 2)))
+        self.section("bezel", 1, lambda: self.drive_bezel(*DRIVE_BOTTOM, DISC_SMALL // 2))
         cur = DISCS[self.data["disc"]]
         nxt = DISCS[(self.data["disc"] + 1) % len(DISCS)]
-        self.section("disc", (cur, nxt, self.disc_frame), lambda: self.draw_discs(cur, nxt))
+        self.ov_update("disc", (cur, self.disc_frame),
+                       lambda: self.ov_disc.cv.itemconfigure(self.ov_disc_img, image=self.disc(cur)[0][self.disc_frame]))
+        self.section("disc", nxt, lambda: self.cv.create_image(*DRIVE_BOTTOM, image=self.disc(nxt)[1],
+                                                               tags=self.layer))
+
+        # парящий 3D-диск: во время работы крутится быстро, на паузе — медленно
+        if running or f % 3 == 0:
+            self.float_frame = (self.float_frame + 1) % FLOAT_FRAMES
+        self.ov_update("float", self.float_frame,
+                       lambda: self.ov_float.cv.itemconfigure(self.ov_float_img,
+                                                              image=self.float_frames[self.float_frame]))
+        self.section("hover", (self.hover, (f // 5) % 2 if self.hover else 0), self.draw_hover)
 
         self.section("fx", (f if self.particles else None), self.draw_particles)
         self.hits = [h for tag in self.ORDER for h in self.sec_hits.get(tag, [])]
 
+    def ov_update(self, name, key, draw):
+        """Обновить окошко-наложение, только если его содержимое изменилось."""
+        if self.ov_state.get(name) != key:
+            self.ov_state[name] = key
+            draw()
+
+    def draw_hover(self):
+        """Подсветка в стиле старых меню: инверсная полоса с курсором ► или двойное неоновое кольцо."""
+        if not self.hover:
+            return
+        kind, name = self.hover
+        if kind == "side":
+            y, label = next((by, lb) for n, by, lb in SIDE_BTNS if n == name)
+            self.rect(401, y - 9, 466, y + 9, GREEN)
+            self.cv.create_text(436, y, text=label, fill="#041200", font=self.bold(self.side_size), tags=self.layer)
+            if (self.f // 5) % 2:
+                self.cv.create_text(399, y, text="►", fill=GREEN, font=self.bold(10), anchor="e", tags=self.layer)
+        else:
+            (cx, cy), r = ROUND_BTNS[name]
+            for k, col in ((2, GREEN), (5, GREEN_DIM)):
+                self.cv.create_oval(cx - r - k, cy - r - k, cx + r + k, cy + r + k, outline=col, width=2,
+                                    tags=self.layer)
+
     def draw_eq(self):
         x1, y1, x2, y2 = EQ_BARS
+        cv = self.ov_eq.cv
+        cv.delete("bars")
         for i, h in enumerate(self.eq):
-            bx = x1 + 3 + i * 7
-            top = y2 - 2 - (y2 - y1 - 4) * h
-            for yy in range(int(y2) - 2, int(top), -3):   # полоски из сегментов, как на картинке
-                self.rect(bx, yy - 2, bx + 5, yy, EQ_BAR)
+            bx = 3 + i * 7
+            top = (y2 - y1) - 2 - (y2 - y1 - 4) * h
+            for yy in range(int(y2 - y1) - 2, int(top), -3):   # полоски из сегментов, как на картинке
+                cv.create_rectangle(bx, yy - 2, bx + 5, yy, fill=EQ_BAR, outline="", tags="bars")
 
     def draw_side(self, f):
         states = {"fx": self.data["fx"], "top": self.topmost}
@@ -428,15 +570,6 @@ class AppPlayer(tq.App2):
             if name in pressed:
                 self.cv.create_oval(cx - r, cy - r, cx + r, cy + r, outline=GREEN, width=2, tags=self.layer)
             self.hits.append((cx - r, cy - r, cx + r, cy + r, self.action(name)))
-
-    def draw_discs(self, cur, nxt):
-        frames, _ = self.disc(cur)
-        cx, cy = DRIVE_TOP
-        self.cv.create_image(cx, cy, image=frames[self.disc_frame], tags=self.layer)
-        r = DISC_BIG // 2
-        self.hits.append((cx - r, cy - r, cx + r, cy + r, self.scratch))
-        _, small = self.disc(nxt)
-        self.cv.create_image(*DRIVE_BOTTOM, image=small, tags=self.layer)
 
     def disc(self, name):
         """Кадры вращения и маленькая картинка диска (загружаются при первом обращении)."""
@@ -475,7 +608,7 @@ class AppPlayer(tq.App2):
                 self.rect(x1 + 2, ry + 1, x2 - 8, ry + LIST_ROW - 1, LIST_SEL_BG)
             ink = LIST_SEL_INK if is_sel else (LIST_RUN_INK if is_run else LIST_INK)
             name = t["name"] if len(t["name"]) <= 24 else t["name"][:23] + "…"
-            prefix = ("▶ " if (f // 6) % 2 else "▷ ") if is_run else ""
+            prefix = ("▶ " if (f // 12) % 2 else "▷ ") if is_run else ""
             self.cv.create_text(45, ry + LIST_ROW / 2, text=f"{idx + 1}. {prefix}{name}", fill=ink,
                                 font=self.bold(12), anchor="w", tags=self.layer)
             total = self.task_total(t["id"])
