@@ -4,6 +4,7 @@
 Скины (по умолчанию — moon):
   moon  — волшебная аркада с сердечками-блоками и мессенджер в духе Windows XP (task_quest_moon.py)
   2000  — неоновый RPG-интерфейс, окошки Windows 98 и комната с призраком (task_quest_2000.py)
+  term  — зелёный фосфорный терминал с падающими символами и полутоновым глазом (task_quest_terminal.py)
 
 Переключение — кнопка SKIN. Таймер, квесты и история при смене скина сохраняются,
 выбранный скин запоминается до следующего запуска.
@@ -18,10 +19,11 @@ import tkinter as tk
 import pixel_tracker as pt
 import task_quest_2000 as tq
 import task_quest_moon as tm
+import task_quest_terminal as tt
 from pixel_tracker import mix
 from task_quest_2000 import N
 
-SKINS = {"moon": ("Moon", tm.AppMoon), "2000": ("2000", tq.App2)}  # порядок = порядок переключения
+SKINS = {"moon": ("Moon", tm.AppMoon), "2000": ("2000", tq.App2), "term": ("Terminal", tt.AppTerminal)}  # порядок = порядок переключения
 DEFAULT_SKIN = "moon"
 SKIN_ORDER = list(SKINS)
 
