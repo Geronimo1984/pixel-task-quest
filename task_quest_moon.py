@@ -84,6 +84,23 @@ KITTY_SLEEP = KITTY[:7] + ["KLLLLLLLLLLLLLLK", "KLKKKLLLLLKKKLLK"] + KITTY[9:]
 KITTY_HAPPY = KITTY[:7] + ["KLLLKLLLLLLKLLLK", "KLLKLKLLLLKLKLLK"] + KITTY[9:]  # глазки «^ ^»
 PURR_FRAMES = 45  # ≈ 3.5 секунды мурчания
 
+# Моти верхом на падающей звезде (оригинальный персонаж из первого скина)
+MOTI_RIDER = pt.MOTI
+MOTI_BLINK = pt.MOTI[:3] + [".KppppppppppK.", ".KppKKppKKppK."] + pt.MOTI[5:]
+RIDE_STAR = [
+    "..........KKK...........",
+    ".........KYYYK..........",
+    ".KKKKKKKKYYWYYKKKKKKKK..",
+    "..KYYYYYYYYYYYYYYYYYYK..",
+    "....KYYYYYYYYYYYYYYK....",
+    "......KYYYYOOYYYYK......",
+    ".....KYYYYK..KYYYYK.....",
+    "....KYYYK......KYYYK....",
+    "....KKK..........KKK....",
+]
+RAINBOW_TRAIL = ["#ff3d5a", "#ff9a3d", "#ffe14d", "#5fe06a", "#3fa8ff", "#9b5cff"]
+RIDER_EVERY = 320  # кадров между пролётами (≈ 25 секунд)
+
 # волшебная пудреница с сердцем
 COMPACT = [
     ".....KKKKKK.....",
@@ -288,6 +305,7 @@ class AppMoon(tq.App2):
         self.idle_since = time.time()
         self.stack = HeartStack()
         self.purr_until = -1
+        self.rider = None
 
         self.load()
         self.data.setdefault("fx", True)
@@ -562,6 +580,7 @@ class AppMoon(tq.App2):
         self.draw_controls(running, f)
         self.draw_messenger(running, f, today)
         self.draw_particles()
+        self.draw_rider(running, f)
         if self.toast and self.toast[1] >= f:
             tw = max(220, len(self.toast[0]) * 8 + 40)
             x1, x2 = W / 2 - tw / 2, W / 2 + tw / 2
@@ -569,6 +588,56 @@ class AppMoon(tq.App2):
             self.xp_titlebar(x1, 180, x2, 200, "Quest Messenger", buttons=False)
             self.rect(x1, 200, x2, 240, M["xp_body"])
             self.uitext(W / 2, 220, self.toast[0], M["xp_text"], 12, True, anchor="center")
+
+    def start(self):
+        super().start()
+        if self.data["running"]:
+            self.launch_rider()  # на старте Моти пролетает по экрану
+
+    def launch_rider(self):
+        if self.rider is None and self.data["fx"]:
+            self.rider = {"x": -70.0, "base": random.choice((26, 474)), "trail": [], "loop": None}
+
+    def rider_loop(self):
+        """Клик по Моти — мёртвая петля с сердечками."""
+        if self.rider and self.rider["loop"] is None:
+            self.rider["loop"] = self.f
+            self.burst("heart", self.rider["x"], self.rider["base"], 8)
+
+    def draw_rider(self, running, f):
+        if self.rider is None:
+            if f % RIDER_EVERY == RIDER_EVERY // 2:
+                self.launch_rider()
+            return
+        r = self.rider
+        r["x"] += 3.2 * (1.3 if running else 1)
+        x, y = r["x"], r["base"] + math.sin(r["x"] * 0.035) * 8
+        if r["loop"] is not None:
+            k = f - r["loop"]
+            if k < 24:
+                a = k / 24 * math.tau
+                x, y = x + math.sin(a) * 30, y - (1 - math.cos(a)) * 30
+            else:
+                r["loop"] = None
+        r["trail"].append((x, y))
+        del r["trail"][:-42]
+        # радужный хвост с пиксельной «волной»
+        for i in range(1, len(r["trail"])):
+            (x1, y1), (x2, _) = r["trail"][i - 1], r["trail"][i]
+            wave = 2 if ((len(r["trail"]) - i + f // 2) // 4) % 2 else 0
+            left, right = min(x1, x2) - 1, max(x1, x2) + 1
+            for k, col in enumerate(RAINBOW_TRAIL):
+                top = y1 - 6 + wave + k * 3
+                self.rect(left, top, right, top + 3, col)
+        if f % 5 == 0:
+            self.particles.append({"kind": "sparkle", "x": x - 30, "y": y + random.uniform(-10, 14),
+                                   "vx": -0.5, "vy": 0, "life": 10, "gravity": False})
+        bob = math.sin(f * 0.5) * 2
+        self.msprite(MOTI_BLINK if f % 40 in (0, 1) else MOTI_RIDER, x + 4, y + 4 + bob, 2.5)
+        self.msprite(RIDE_STAR, x, y + 18 + bob, 2.5)
+        self.hits.append((x - 32, y - 26, x + 32, y + 20, self.rider_loop))
+        if x > W + 90:
+            self.rider = None
 
     def pet_kitty(self):
         """Пасхалка: погладить кошечку."""
