@@ -10,6 +10,9 @@
 import ctypes
 import ctypes.util
 import math
+import platform
+
+_STRET = platform.machine() == "x86_64"
 
 try:
     import disc_render as dr
@@ -34,7 +37,12 @@ _BLEND_DEST_OUT = 23   # kCGBlendModeDestinationOut
 
 
 def _send(obj, sel, restype=_V, argtypes=(), *args):
-    fn = ctypes.cast(_objc.objc_msgSend, ctypes.CFUNCTYPE(restype, _V, _V, *argtypes))
+    # На Intel (и в Python под Rosetta) большие структуры вроде CGRect возвращает objc_msgSend_stret —
+    # обычный objc_msgSend для них портит память и роняет программу. На Apple Silicon такой функции нет.
+    entry = _objc.objc_msgSend
+    if _STRET and isinstance(restype, type) and issubclass(restype, ctypes.Structure) and ctypes.sizeof(restype) > 16:
+        entry = _objc.objc_msgSend_stret
+    fn = ctypes.cast(entry, ctypes.CFUNCTYPE(restype, _V, _V, *argtypes))
     return fn(obj, _objc.sel_registerName(sel), *args)
 
 
