@@ -15,6 +15,7 @@
 import math
 import os
 import random
+import shutil
 import threading
 import time
 import tkinter as tk
@@ -38,7 +39,12 @@ DISC_TITLES = {   # assets/discs/<имя>.png → название
     "outlast": "Outlast Trinity", "sims2": "The Sims 2", "sh3": "Silent Hill 3",
 }
 DISCS = list(DISC_TITLES)
-DISC_CENTER, DISC_SIZE, DISC_FRAMES = (222, 220), 420, 24   # диск MiniDisc на картинке: центр и диаметр
+DISC_CENTER, DISC_SIZE, DISC_FRAMES = (222, 220), 420, 48   # центр и диаметр диска, кадров на оборот (по 7,5°)
+# вращение как у CD-проигрывателя: разгон при старте и долгий выбег до остановки
+DISC_MS = 50              # свой цикл диска — 20 кадров в секунду, работает только пока диск крутится
+DISC_SPEED = 150          # градусов в секунду на полном ходу (оборот за 2,4 с)
+DISC_SPINUP = 1.2         # секунд на разгон
+DISC_COAST = (0.15, 0.55)  # выбег: постоянное трение + трение от скорости — остановка ≈ 3 с
 HUB_AT, SHUTTER_AT = (222, 220), (282, 150)
 LABEL = (300, 171, 468, 276)                                 # чёрное окошко ярлыка на шторке
 PANEL_Y = 466                                                # нижняя панель — под картриджем
@@ -91,8 +97,10 @@ class AppMD(tq.App2):
         self.keys, self.sec_hits = {}, {}
         self.frames = {}          # имя диска → список PhotoImage (заполняется по мере загрузки)
         self.rendering = set()    # диски, кадры которых сейчас рисуются в фоне
-        self.disc_frame = 0
-        self.scratch_until = -1
+        self.disc_angle = 0.0
+        self.disc_speed = 0.0
+        self.disc_last = time.perf_counter()
+        self._disc_after = None
         self.disc_switch_at = time.time() + DISC_EVERY_SEC
 
         self.load()
@@ -141,23 +149,38 @@ class AppMD(tq.App2):
         threading.Thread(target=work, daemon=True).start()
 
     def load_frames_step(self):
-        """Подгружаем по паре кадров за тик, чтобы окно не замирало."""
+        """Подгружаем по паре кадров за тик, чтобы окно не замирало: сначала текущий диск, потом следующий,
+        чтобы смена диска была мгновенной."""
         name = self.current_disc()
+        nxt = DISCS[(self.data["md_disc"] + 1) % len(DISCS)]
+        if len(self.frames.get(name) or []) >= DISC_FRAMES:
+            for other in list(self.frames):
+                if other not in (name, nxt):
+                    del self.frames[other]
+            if nxt not in self.frames:
+                self.want_disc(nxt)
+                self.prune_cache({name, nxt})
+            name = nxt
         frames = self.frames.get(name)
         if frames is None or len(frames) >= DISC_FRAMES:
             return
         folder = os.path.join(CACHE, f"{name}_{DISC_SIZE}_{DISC_FRAMES}")
-        for _ in range(3):
+        for _ in range(2):
             path = os.path.join(folder, f"{len(frames)}.png")
             if len(frames) >= DISC_FRAMES or not os.path.exists(path):
                 break
             frames.append(tk.PhotoImage(file=path))
-        if len(frames) == DISC_FRAMES:   # текущий готов — заранее готовим следующий, лишние выгружаем
-            nxt = DISCS[(self.data["md_disc"] + 1) % len(DISCS)]
-            for other in list(self.frames):
-                if other not in (name, nxt):
-                    del self.frames[other]
-            self.want_disc(nxt)
+
+    @staticmethod
+    def prune_cache(keep):
+        """В кэше — кадры только текущего и следующего диска (остальные легко нарисовать заново)."""
+        keep = {f"{n}_{DISC_SIZE}_{DISC_FRAMES}" for n in keep}
+        try:
+            for entry in os.listdir(CACHE):
+                if entry not in keep:
+                    shutil.rmtree(os.path.join(CACHE, entry), ignore_errors=True)
+        except OSError:
+            pass
 
     def next_disc(self):
         self.data["md_disc"] = (self.data["md_disc"] + 1) % len(DISCS)
@@ -167,9 +190,51 @@ class AppMD(tq.App2):
 
     def scratch(self):
         """Клик по диску — «скретч» назад и смена диска (отсчёт 20 секунд начинается заново)."""
-        self.scratch_until = self.f + 10
+        self.disc_speed = -260
+        self.spin()
         self.next_disc()
         self.disc_switch_at = time.time() + DISC_EVERY_SEC
+
+    def spin(self):
+        """Запускает цикл вращения, если он ещё не идёт."""
+        if self._disc_after is None:
+            self.disc_last = time.perf_counter()
+            self._disc_after = self.root.after(DISC_MS, self.disc_step)
+
+    def disc_step(self):
+        """Кадр вращения: разгон до полного хода, пока идёт таймер, и долгий плавный выбег после стопа."""
+        self._disc_after = None
+        now = time.perf_counter()
+        dt, self.disc_last = min(0.2, now - self.disc_last), now
+        v = self.disc_speed
+        if self.data["running"]:
+            if v < DISC_SPEED:
+                v = min(DISC_SPEED, v + DISC_SPEED / DISC_SPINUP * dt * (2.5 if v < 0 else 1))
+        elif v > 0:
+            v = max(0.0, v - (DISC_SPEED * DISC_COAST[0] + v * DISC_COAST[1]) * dt)
+        elif v < 0:   # после «скретча» на паузе — диск просто останавливается
+            v = min(0.0, v + DISC_SPEED * 2 * dt)
+        self.disc_speed = v
+        self.disc_angle = (self.disc_angle + v * dt) % 360
+        self.show_disc()
+        if v or self.data["running"]:
+            self._disc_after = self.root.after(DISC_MS, self.disc_step)
+
+    def show_disc(self):
+        frames = self.frames.get(self.current_disc()) or []
+        if not frames:
+            return
+        k = round(self.disc_angle / (360 / DISC_FRAMES)) % DISC_FRAMES
+        img = frames[k] if len(frames) == DISC_FRAMES else frames[0]
+        if self.keys.get("disc") != str(img):
+            self.cv.itemconfigure(self.disc_item, image=img)
+            self.keys["disc"] = str(img)
+
+    def teardown(self):
+        if self._disc_after:
+            self.root.after_cancel(self._disc_after)
+            self._disc_after = None
+        super().teardown()
 
     def start(self):
         super().start()
@@ -263,16 +328,9 @@ class AppMD(tq.App2):
             self.next_disc()
             self.disc_switch_at = time.time() + DISC_EVERY_SEC
         self.load_frames_step()
-        frames = self.frames.get(self.current_disc()) or []
-        if frames:
-            if f < self.scratch_until:
-                self.disc_frame = (self.disc_frame - 2) % DISC_FRAMES
-            elif running:
-                self.disc_frame = (self.disc_frame + 1) % DISC_FRAMES
-            img = frames[self.disc_frame % len(frames)] if len(frames) == DISC_FRAMES else frames[0]
-            if self.keys.get("disc") != str(img):
-                self.cv.itemconfigure(self.disc_item, image=img)
-                self.keys["disc"] = str(img)
+        if running or self.disc_speed:
+            self.spin()
+        self.show_disc()
 
         # окошко ярлыка: статус, время, название трека (как «60 LAPISIA»)
         shown = self.session_elapsed() if running else (self.task_total(sel["id"]) if sel else 0)
