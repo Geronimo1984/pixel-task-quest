@@ -23,6 +23,7 @@ import task_quest_2000 as tq
 import task_quest_moon as tm
 import task_quest_md as tmd
 import task_quest_terminal as tt
+import titlebar
 from pixel_tracker import mix
 from task_quest_2000 import N
 
@@ -258,7 +259,15 @@ class Shell:
             root.iconphoto(True, self.icon)
         except tk.TclError:
             pass
+        # своя панель заголовка в стиле скина вместо стандартной (окно без системной рамки)
+        root.overrideredirect(True)
+        self.bar = titlebar.TitleBar(root, lambda: self.app.on_close())
         self.load_skin(skin if skin in SKINS else DEFAULT_SKIN, first=True)
+        root.update_idletasks()
+        x = max(0, (root.winfo_screenwidth() - root.winfo_reqwidth()) // 2)
+        root.geometry(f"+{x}+{30}")
+        root.createcommand("::tk::mac::ReopenApplication", self.show)  # клик по иконке в Dock
+        root.after(150, self.show)
 
     def load_skin(self, name, first=False):
         topmost = False
@@ -267,12 +276,19 @@ class Shell:
             self.app.save()
             self.app.teardown()
         self.app = SKINS[name][1](self.root)
+        self.bar.apply(name, int(self.app.cv["width"]), self.root.title())
         self.app.on_switch = self.pick_skin
         self.app.topmost = topmost
         self.app.data["skin"] = name
         self.app.save()
         if not first:
             self.app.show_toast(f"Скин: {SKINS[name][0]} ✓", 25)
+
+    def show(self):
+        self.root.deiconify()
+        self.root.lift()
+        titlebar.mac_window_polish()
+        self.root.focus_force()
 
     def pick_skin(self):
         """Кнопка SKIN открывает список скинов."""
