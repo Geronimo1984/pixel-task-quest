@@ -22,6 +22,7 @@ import tkinter as tk
 from tkinter import font as tkfont
 
 import disc_render
+import mac_disc
 import pixel_tracker as pt
 import task_quest_2000 as tq
 from pixel_tracker import fmt_hms
@@ -101,6 +102,8 @@ class AppMD(tq.App2):
         self.disc_speed = 0.0
         self.disc_last = time.perf_counter()
         self._disc_after = None
+        self.native = None        # диск на слое Core Animation (macOS) — если получилось подключить
+        self.native_tried = 0.0
         self.disc_switch_at = time.time() + DISC_EVERY_SEC
 
         self.load()
@@ -120,7 +123,8 @@ class AppMD(tq.App2):
         root.bind("<space>", self.on_space)
         root.protocol("WM_DELETE_WINDOW", self.on_close)
 
-        self.want_disc(self.current_disc())
+        if not mac_disc.AVAILABLE:   # на macOS диск крутит Core Animation, кадры Tk — только запасной вариант
+            self.want_disc(self.current_disc())
         if not self.data["tasks"]:
             self.show_toast("ДОБАВЬ ПЕРВЫЙ ТРЕК", 60)
         self.tick()
@@ -149,6 +153,11 @@ class AppMD(tq.App2):
         threading.Thread(target=work, daemon=True).start()
 
     def load_frames_step(self):
+        if self.native:
+            return
+        self._load_frames_step()
+
+    def _load_frames_step(self):
         """Подгружаем по паре кадров за тик, чтобы окно не замирало: сначала текущий диск, потом следующий,
         чтобы смена диска была мгновенной."""
         name = self.current_disc()
@@ -185,7 +194,10 @@ class AppMD(tq.App2):
     def next_disc(self):
         self.data["md_disc"] = (self.data["md_disc"] + 1) % len(DISCS)
         self.save()
-        self.want_disc(self.current_disc())
+        if self.native:
+            self.native.set_image(self.disc_path(self.current_disc()))
+        elif not mac_disc.AVAILABLE or self.native_tried == float("inf"):
+            self.want_disc(self.current_disc())
         self.show_toast(DISC_TITLES[self.current_disc()].upper(), 30)
 
     def scratch(self):
@@ -194,6 +206,44 @@ class AppMD(tq.App2):
         self.spin()
         self.next_disc()
         self.disc_switch_at = time.time() + DISC_EVERY_SEC
+
+    @staticmethod
+    def disc_path(name):
+        return os.path.join(ASSETS, "discs", f"{name}.png")
+
+    def attach_native(self):
+        """Пробуем отдать вращение диска macOS (слой Core Animation над окном): плавно и без нагрузки на Tk."""
+        if self.native or not mac_disc.AVAILABLE or time.time() - self.native_tried < 1:
+            return
+        self.native_tried = time.time()
+        if not self.root.winfo_ismapped():
+            return
+        x0, y0 = DISC_CENTER[0] - DISC_SIZE // 2, DISC_CENTER[1] - DISC_SIZE // 2
+        self.native = mac_disc.attach(*self.disc_origin(), DISC_SIZE,
+                                      self.disc_path(self.current_disc()), os.path.join(ASSETS, "md_shutter.png"),
+                                      SHUTTER_AT[0] - x0, SHUTTER_AT[1] - y0, os.path.join(ASSETS, "md_hub.png"),
+                                      360 / DISC_SPEED)
+        if not self.native:
+            self.native_fails = getattr(self, "native_fails", 0) + 1
+            if self.native_fails >= 3:   # не получилось за три попытки — крутим по-старому, кадрами Tk
+                self.native_tried = float("inf")
+                self.want_disc(self.current_disc())
+        if self.native:
+            self.frames.clear()   # кадры Tk больше не нужны
+            self.native.set_speed(self.disc_speed / DISC_SPEED)
+            self.overlay_changed(getattr(self, "overlay_open", False))
+
+    def disc_origin(self):
+        """Левый верхний угол квадрата диска в координатах окна (над холстом — панель заголовка)."""
+        ox = self.cv.winfo_rootx() - self.root.winfo_rootx()
+        oy = self.cv.winfo_rooty() - self.root.winfo_rooty()
+        return ox + DISC_CENTER[0] - DISC_SIZE // 2, oy + DISC_CENTER[1] - DISC_SIZE // 2
+
+    def overlay_changed(self, shown):
+        """Панель выбора скина поверх окна: слой диска на это время прячем, чтобы он её не закрывал."""
+        self.overlay_open = shown
+        if self.native:
+            self.native.set_hidden(shown)
 
     def spin(self):
         """Запускает цикл вращения, если он ещё не идёт."""
@@ -221,6 +271,9 @@ class AppMD(tq.App2):
             self._disc_after = self.root.after(DISC_MS, self.disc_step)
 
     def show_disc(self):
+        if self.native:
+            self.native.set_speed(self.disc_speed / DISC_SPEED)
+            return
         frames = self.frames.get(self.current_disc()) or []
         if not frames:
             return
@@ -231,6 +284,9 @@ class AppMD(tq.App2):
             self.keys["disc"] = str(img)
 
     def teardown(self):
+        if self.native:
+            self.native.remove()
+            self.native = None
         if self._disc_after:
             self.root.after_cancel(self._disc_after)
             self._disc_after = None
@@ -328,6 +384,9 @@ class AppMD(tq.App2):
             self.next_disc()
             self.disc_switch_at = time.time() + DISC_EVERY_SEC
         self.load_frames_step()
+        self.attach_native()
+        if self.native:
+            self.native.follow(*self.disc_origin())
         if running or self.disc_speed:
             self.spin()
         self.show_disc()

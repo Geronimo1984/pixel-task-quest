@@ -114,6 +114,8 @@ class SkinPicker:
         self.frame.place(in_=app.cv, relx=0.5, y=96, anchor="n")
         self.frame.lift()
         self.cv.focus_set()
+        if hasattr(app, "overlay_changed"):
+            app.overlay_changed(True)
 
     def draw(self):
         cv, p, w = self.cv, self.pal, self.WIDTH
@@ -166,6 +168,8 @@ class SkinPicker:
         app = self.shell.app
         if app.cv.winfo_exists():
             app.cv.bind("<Button-1>", app.on_click)
+            if hasattr(app, "overlay_changed"):
+                app.overlay_changed(False)
         self.frame.destroy()
 
 
