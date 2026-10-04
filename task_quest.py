@@ -5,6 +5,7 @@
   moon  — волшебная аркада с сердечками-блоками и мессенджер в духе Windows XP (task_quest_moon.py)
   2000  — неоновый RPG-интерфейс, окошки Windows 98 и комната с призраком (task_quest_2000.py)
   term  — зелёный фосфорный терминал с падающими символами и полутоновым глазом (task_quest_terminal.py)
+  md    — картридж MiniDisc, внутри крутятся диски из коллекции (task_quest_md.py)
 
 Кнопка SKIN открывает список скинов с мини-иконками. Таймер, квесты и история при смене скина сохраняются,
 выбранный скин запоминается до следующего запуска.
@@ -20,16 +21,19 @@ import tkinter as tk
 import pixel_tracker as pt
 import task_quest_2000 as tq
 import task_quest_moon as tm
+import task_quest_md as tmd
 import task_quest_terminal as tt
 from pixel_tracker import mix
 from task_quest_2000 import N
 
-SKINS = {"moon": ("Moon", tm.AppMoon), "2000": ("2000", tq.App2), "term": ("Terminal", tt.AppTerminal)}  # порядок = порядок переключения
+SKINS = {"moon": ("Moon", tm.AppMoon), "2000": ("2000", tq.App2), "term": ("Terminal", tt.AppTerminal),
+         "md": ("MiniDisc", tmd.AppMD)}  # порядок = порядок переключения
 DEFAULT_SKIN = "moon"
 SKIN_INFO = {
     "moon": "Волшебная аркада, Кирби и мессенджер",
     "2000": "Неоновый RPG, Windows 98 и призрак",
     "term": "Зелёный фосфорный терминал",
+    "md": "Картридж MiniDisc с коллекцией дисков",
 }
 ICON = 34  # размер мини-иконки в списке скинов
 
@@ -64,6 +68,9 @@ def skin_icon(name):
             img.put("#04150a", to=(2, y, ICON - 2, y + 1))
         sprite(tq.FONT[">"], {"#": "#39ff6a"}, 6, 10, 2)
         img.put("#39ff6a", to=(18, 22, 28, 24))
+    elif name == "md":        # уменьшенный картридж MiniDisc
+        src = tk.PhotoImage(file=os.path.join(tmd.ASSETS, "md.png"))
+        img.tk.call(img, "copy", src, "-subsample", 14, 14, "-to", 0, 1)
     return img
 
 
