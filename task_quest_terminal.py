@@ -229,12 +229,13 @@ class AppTerminal(tq.App2):
         self.draw_prompt(running, sel, f, glitch)
         self.draw_eye(running, f, glitch)
 
-        # большой таймер
+        # большой таймер — общее время за день
         total = self.task_total(sel["id"]) if sel else 0
-        digits = fmt_hms(total)
+        digits = fmt_hms(today)
         if running and (f // 6) % 2:
             digits = digits.replace(":", " ")
         self.stext(digits, 277, 276, 6, G["bright"] if running else G["mid"], anchor="center")
+        self.gtext(470, 274, "за день", G["mid"], 10, anchor="e")
 
         # «Loading..» — прогресс фокус-сессии
         focus = (self.session_elapsed() % FOCUS_SEC) / FOCUS_SEC if running else 0
@@ -254,7 +255,7 @@ class AppTerminal(tq.App2):
             self.burst("sparkle", 277, 180, 18)
             self.show_toast(f"LEVEL UP ★ LV {lv}", 40)
         self.last_lv = lv
-        self.gtext(84, 368, f"> сессия {fmt_hms(self.session_elapsed())} | сегодня {fmt_hms(today)} | LV {lv:02d}",
+        self.gtext(84, 368, f"> квест {fmt_hms(total)} | сессия {fmt_hms(self.session_elapsed())} | LV {lv:02d}",
                    G["mid"], 11)
 
         # кнопки-команды
