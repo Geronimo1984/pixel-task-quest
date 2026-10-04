@@ -437,7 +437,9 @@ class AppMD(tq.App2):
         self.show_disc()
 
         # окошко ярлыка: статус, время, название трека (как «60 LAPISIA»)
-        shown = self.session_elapsed() if running else (self.task_total(sel["id"]) if sel else 0)
+        # крупно — общее время за день, мелко справа сверху — время идущего (или выбранного) трека
+        cur = running["task_id"] if running else (sel["id"] if sel else None)
+        track = fmt_hms(self.task_total(cur)) if cur else "--:--:--"
         if self.toast and self.toast[1] >= f:
             caption = self.toast[0]
         else:
@@ -445,8 +447,8 @@ class AppMD(tq.App2):
         caption = caption if len(caption) <= 40 else caption[:39] + "…"
         status = ("● REC" if (f // 6) % 2 else "○ REC") if running else "❚❚ PAUSE"
         day = fmt_hms(today)
-        self.section("label", (fmt_hms(shown), caption, status, day),
-                     lambda: self.draw_label(fmt_hms(shown), caption, status, running, day))
+        self.section("label", (day, caption, status, track),
+                     lambda: self.draw_label(day, caption, status, running, track))
 
         btn_key = (running, self.hover, self.topmost, tuple(self.pressed.get(n, -1) >= f for n, *_ in BUTTONS),
                    (f // 5) % 2 if self.hover else 0)
@@ -472,14 +474,14 @@ class AppMD(tq.App2):
         r = DISC_SIZE // 2
         self.hits.insert(0, (DISC_CENTER[0] - r, DISC_CENTER[1] - r, SHUTTER_AT[0], DISC_CENTER[1] + r, self.scratch))
 
-    def draw_label(self, time_text, caption, status, running, day):
+    def draw_label(self, time_text, caption, status, running, track):
         x1, y1, x2, y2 = LABEL
         cv = self.cv
         cv.create_text(x1 + 10, y1 + 16, text=status, fill=C["run"] if running else C["label_dim"],
                        font=self.sans(10), anchor="w", tags=self.layer)
-        # общее время за день — в правом верхнем углу окошка, напротив REC / PAUSE
-        cv.create_text(x2 - 8, y1 + 16, text=f"ДЕНЬ {day}", fill=C["label_dim"], font=self.sans(10), anchor="e",
-                       tags=self.layer)
+        # время идущего трека — в правом верхнем углу окошка, напротив REC / PAUSE
+        cv.create_text(x2 - 8, y1 + 16, text=f"ТРЕК {track}", fill=C["run"] if running else C["label_dim"],
+                       font=self.sans(10), anchor="e", tags=self.layer)
         cv.create_text(x2 - 8, y1 + 54, text=time_text, fill=C["label"], font=self.sans(28), anchor="e",
                        tags=self.layer)
         width = x2 - x1 - 16
