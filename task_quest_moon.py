@@ -20,14 +20,14 @@ from pixel_tracker import HEART, SPARKLE, STAR, fmt_hms, lighten, mix, moon_cell
 W, H = 480, 800
 
 M = {  # пастельная ночь — в тон автомату, Кирби, Синнамоли и Сейлор Мун
-    "bg": "#141640", "body": "#4b4296", "body_d": "#322b70", "frame": "#f6a3d6", "line": "#9a92ec",
-    "panel": "#23245a", "well": "#181a46", "grid": "#24275e", "pink": "#ff8cc6", "hot": "#ff5fa2",
-    "lilac": "#c7b6ff", "yellow": "#ffdf7a", "mint": "#8fe3c4", "white": "#ffffff", "ink": "#12123a",
-    "ctrl": "#c99cf0", "ctrl_l": "#e9cbff", "ctrl_d": "#9a72d6",
+    "bg": "#141640", "body": "#4a34ac", "body_d": "#2f2180", "frame": "#ff7fcf", "line": "#8a76f7",
+    "panel": "#221f62", "well": "#181a46", "grid": "#24275e", "pink": "#ff62b4", "hot": "#ff2f8c",
+    "lilac": "#b296ff", "yellow": "#ffd23a", "mint": "#3fe8ac", "white": "#ffffff", "ink": "#12123a",
+    "ctrl": "#c08af5", "ctrl_l": "#e2c0ff", "ctrl_d": "#8f5ee0",
     # окно мессенджера — тот же индиго, только светлее
-    "xp1": "#7b97f2", "xp2": "#5874e0", "xp3": "#4660c8", "xp_hi": "#aebfff", "xp_red": "#f06a8a",
+    "xp1": "#6a8aff", "xp2": "#4566f2", "xp3": "#3450dc", "xp_hi": "#a4b8ff", "xp_red": "#ff3f6e",
     "xp_body": "#eef0ff", "xp_body2": "#dde2fb", "xp_border": "#4660c8", "xp_list": "#ffffff",
-    "xp_line": "#a9b6ec", "xp_sel": "#dbe2ff", "xp_sel_line": "#8b9cec", "xp_text": "#26306e",
+    "xp_line": "#a9b6ec", "xp_sel": "#cfd9ff", "xp_sel_line": "#6f88f7", "xp_text": "#26306e",
     "xp_dim": "#6d76b4", "xp_status": "#e3e7fb",
 }
 # насыщенные цвета текста — чтобы всё легко читалось на пастельном фоне
@@ -38,8 +38,8 @@ T = {
 }
 
 P3 = dict(tq.P2)
-P3.update({"K": "#2a2466", "L": "#c7b6ff", "l": "#9a92ec", "P": "#ff8cc6", "R": "#ff5fa2", "W": "#ffffff",
-           "Y": "#ffdf7a", "O": "#ffbf6b", "V": "#8a7fd6", "G": "#8fe3c4", "B": "#8f9cff", "w": "#f6efff"})
+P3.update({"K": "#2a2466", "L": "#b296ff", "l": "#8a76f7", "P": "#ff62b4", "R": "#ff2f8c", "W": "#ffffff",
+           "Y": "#ffd23a", "O": "#ffa23a", "V": "#7a5ee6", "G": "#3fe8ac", "B": "#6a7cff", "w": "#f6efff"})
 
 # ── Спрайты (оригинальные) ──────────────────────────────────────────────────
 BIG_HEART = [
@@ -154,8 +154,8 @@ SHAPES = {
     "J": [(0, 0), (0, 1), (1, 1), (2, 1)],
     "L": [(2, 0), (0, 1), (1, 1), (2, 1)],
 }
-PIECE_COLORS = {"I": "#8fd3ff", "O": "#ffd98a", "T": "#b9a0ff", "S": "#95e6c4",
-                "Z": "#ff9cc9", "J": "#8f9cff", "L": "#ffb38f"}
+PIECE_COLORS = {"I": "#38c2ff", "O": "#ffc72e", "T": "#9a62ff", "S": "#2ee6a0",
+                "Z": "#ff4fa8", "J": "#5a6aff", "L": "#ff8540"}
 
 
 def _rotations(cells):
@@ -299,6 +299,21 @@ CRANE_AT = (175, 62)  # левый верхний угол картинки в �
 CLAW_AT = (61, 75)    # где клешня висит на картинке автомата
 CLAW_SPLIT = (88, 9)  # с какого ряда начинаются зубцы и где середина клешни
 CLAW_CYCLE = 90       # кадров на «попытку достать игрушку» (≈ 7 секунд)
+# звёздочка, лежащая у автомата (точная копия с картинки, 16×10)
+PICK_STAR = [
+    ".......yd.......",
+    "......wyyd......",
+    ".....wyyydo.....",
+    ".wyyyyyyyyyyyw..",
+    "wyyyyyyyyyyyyyy.",
+    ".dddyyyyyyydooo.",
+    "..dyyyyyyyyyoo..",
+    "...yyyyodyyyd...",
+    "..wyyydoddyyy...",
+    "..wydooo..oyw...",
+]
+CRANE_STAR_PAL = {"w": "#fffbe0", "y": "#fffbb8", "d": "#d8bd6a", "o": "#b39547"}
+WARP_STAR_PAL = {"w": "#fff7a0", "y": KIRBY_PAL["h"], "d": KIRBY_PAL["g"], "o": "#a86400"}  # звезда, на которой летит Кирби
 CRANE_STARS = [(32, 172), (45, 170), (57, 175), (74, 180), (95, 172), (109, 171), (16, 186), (113, 40)]
 
 
@@ -314,8 +329,8 @@ ROUND_X0, ROUND_STEP = 319, 32  # круглые кнопки пульта
 WELL_X, WELL_Y, CELL = 140, 50, 20       # стакан 10×17 клеток
 PANEL_L, PANEL_R = (18, 126), (354, 462)  # колонки автомата
 XP = (36, 478, 444, 796)                  # окно мессенджера
-ROUND_BTNS = [("csv", "CSV", "#ff9cc9"), ("top", "TOP", "#8fd3ff"), ("fx", "FX", "#b9a0ff"),
-              ("clear", "CLR", "#ffb38f"), ("skin", "SKIN", "#95e6c4")]
+ROUND_BTNS = [("csv", "CSV", "#ff4fa8"), ("top", "TOP", "#38c2ff"), ("fx", "FX", "#9a62ff"),
+              ("clear", "CLR", "#ff8540"), ("skin", "SKIN", "#2ee6a0")]
 
 
 class AppMoon(tq.App2):
@@ -349,6 +364,7 @@ class AppMoon(tq.App2):
         self.idle_since = time.time()
         self.stack = HeartStack()
         self.kirby_hop = -KIRBY_HOP
+        self.star_jobs = []
         self.crane = self.load_asset("crane_empty.png") or self.load_asset("crane.png")
         claw = self.load_asset("crane_claw.png")
         self.claw_parts = None
@@ -636,10 +652,31 @@ class AppMoon(tq.App2):
             self.rect(x1, 200, x2, 240, M["xp_body"])
             self.uitext(W / 2, 220, self.toast[0], T["msg"], 12, True, anchor="center")
 
+    def star_burst(self, x, y, n, pals):
+        """Звёздочки всплывают вверх по одной-две за кадр, покачиваясь и мерцая."""
+        self.star_jobs.append([x, y, pals, n])
+
+    def emit_stars(self):
+        for job in self.star_jobs:
+            x, y, pals, _ = job
+            for _ in range(min(2, job[3])):
+                job[3] -= 1
+                self.particles.append({"kind": "kstar", "x": x + random.uniform(-26, 26), "y": y + random.uniform(-6, 6),
+                                       "vx": random.uniform(-1.8, 1.8), "vy": random.uniform(-4.2, -2.2),
+                                       "life": random.randint(18, 28), "gravity": False,
+                                       "s": random.choice((1, 1.5, 1.5, 2)), "ph": random.uniform(0, math.tau),
+                                       "pal": random.choice(pals)})
+        self.star_jobs = [j for j in self.star_jobs if j[3] > 0]
+
     def kirby_happy(self):
-        """Клик по Кирби — подпрыгивает на звезде, жмурится, сердечки."""
+        """Клик по Кирби — подпрыгивает на звезде, жмурится, всплывают звёздочки как его звезда."""
         self.kirby_hop = self.f
-        self.burst("heart", KIRBY_CENTER[0], KIRBY_CENTER[1] - 20, 8)
+        self.star_burst(KIRBY_CENTER[0], KIRBY_CENTER[1] + 10, 10, (WARP_STAR_PAL, WARP_STAR_PAL, CRANE_STAR_PAL))
+
+    def crane_happy(self):
+        """Клик по автомату — из него всплывают звёздочки, как те, что лежат рядом."""
+        x0, y0 = CRANE_AT
+        self.star_burst(x0 + 65, y0 + 150, 12, (CRANE_STAR_PAL, CRANE_STAR_PAL, WARP_STAR_PAL))
 
     def draw_kirby(self, running, f):
         """Кирби мчится на звезде на месте: радуга струится назад, звезда покачивается, мимо летят искры."""
@@ -740,7 +777,15 @@ class AppMoon(tq.App2):
     def poke_cinna(self):
         if self.cinna:
             self.cinna["hearts"] = self.f + 16
-            self.burst("heart", *self.cinna["pos"], 10)
+            x, y = self.cinna["pos"]
+            for _ in range(14):  # облако мыльных пузырей
+                a = random.uniform(0, math.tau)
+                self.particles.append({"kind": "bubble", "x": round(x + math.cos(a) * CINNA_R * 0.8),
+                                       "y": round(y + math.sin(a) * CINNA_R * 0.8),
+                                       "vx": math.cos(a) * random.uniform(0.6, 1.8),
+                                       "vy": random.uniform(-2.4, -0.9), "r": random.choice((3, 4, 5, 5, 6, 7)),
+                                       "life": random.randint(30, 46), "gravity": False,
+                                       "ph": random.uniform(0, math.tau)})
 
     def draw_cinna(self, running, f):
         """Синнаморол в пузыре летает петлями по подвалу экрана — туда и обратно, моргая."""
@@ -852,6 +897,7 @@ class AppMoon(tq.App2):
             for k, (sx, sy) in enumerate(CRANE_STARS):
                 if (f // 3 + k * 5) % 24 < 3:
                     self.msprite(SPARKLE, x0 + sx, y0 + sy + 3, 2)
+            self.hits.append((x0, y0, x0 + w, y0 + h, self.crane_happy))
             if (f // 8) % 2:
                 self.rect(150, y0 + h + 10, 330, y0 + h + 30, M["well"])
                 self.ptext("PRESS START", 240, y0 + h + 13, 2, M["white"], anchor="center", shadow=M["hot"])
@@ -953,6 +999,14 @@ class AppMoon(tq.App2):
         self.uitext(62, 779, status, T["msg"], 11, True)
         self.uitext(434, 779, f"сегодня {fmt_hms(today)}", T["msg_dim"], 11, True, anchor="e")
 
+    def update_particles(self):
+        super().update_particles()
+        self.emit_stars()
+        for p in self.particles:   # звёздочки и пузыри всплывают, покачиваясь
+            if p["kind"] in ("kstar", "bubble") and "ph" in p:
+                p["x"] += math.sin(p["life"] / 4 + p["ph"]) * 0.7
+                p["vx"] *= 0.96
+
     def draw_particles(self):
         for p in self.particles:
             k = p["kind"]
@@ -966,6 +1020,11 @@ class AppMoon(tq.App2):
                 self.ptext(p["text"], p["x"], p["y"], 2, M["mint"], anchor="center", shadow=M["ink"])
             elif k == "float":
                 self.msprite(HEART, p["x"], p["y"], 2 if p["life"] > 8 else 1.5)
+            elif k == "kstar":
+                s = p["s"] if p["life"] > 6 else 1
+                self.sprite(PICK_STAR, p["x"], p["y"], s, pal=p["pal"])
+                if (p["life"] + int(p["ph"] * 3)) % 9 == 0:
+                    self.msprite(SPARKLE, p["x"] + 10, p["y"] - 12, 2)
             elif k == "bubble":
                 for i, j, col in tq.RINGS[p["r"]]:
                     self.rect(p["x"] + i, p["y"] + j, p["x"] + i + 1, p["y"] + j + 1, col)
