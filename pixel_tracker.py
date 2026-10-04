@@ -409,6 +409,15 @@ class App:
             total += time.time() - r["start"]
         return total
 
+    def task_today(self, tid):
+        """Время задачи за сегодня (с идущей сессией)."""
+        sod = datetime.combine(date.today(), datetime.min.time()).timestamp()
+        spans = [(s["start"], s["end"]) for s in self.data["sessions"] if s["task_id"] == tid]
+        r = self.data["running"]
+        if r and r["task_id"] == tid:
+            spans.append((r["start"], time.time()))
+        return sum(max(0, end - max(start, sod)) for start, end in spans)
+
     def today_total(self):
         sod = datetime.combine(date.today(), datetime.min.time()).timestamp()
         spans = [(s["start"], s["end"]) for s in self.data["sessions"]]
@@ -619,7 +628,8 @@ class App:
             self.placeholder_on = False
 
     def on_space(self, event):
-        if self.root.focus_get() is self.entry:
+        focus = self.root.focus_get()
+        if focus is self.entry or isinstance(focus, (tk.Entry, tk.Text)):   # пробел в поле ввода — это текст
             return
         self.toggle()
 

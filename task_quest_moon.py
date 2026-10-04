@@ -390,6 +390,10 @@ ROUND_X0, ROUND_STEP = 319, 32  # круглые кнопки пульта
 WELL_X, WELL_Y, CELL = 140, 50, 20       # стакан 10×17 клеток
 PANEL_L, PANEL_R = (18, 126), (354, 462)  # колонки автомата
 XP = (36, 478, 444, 796)                  # окно мессенджера
+# режим «Канбан»: колонки статусов в окне мессенджера
+KANBAN = [("todo", "ЗАДАЧИ", "#8a76f7"), ("doing", "В РАБОТЕ", "#ff2f8c"), ("done", "ГОТОВО", "#21b97a")]
+KB_AREA = (50, 572, 430, 754)             # колонки внутри белого списка
+KB_GAP, KB_HEAD, KB_CARD, KB_STEP = 6, 20, 36, 40
 ROUND_BTNS = [("csv", "CSV", "#ff4fa8"), ("top", "TOP", "#38c2ff"), ("fx", "FX", "#9a62ff"),
               ("clear", "CLR", "#ff8540"), ("skin", "SKIN", "#2ee6a0")]
 
@@ -425,6 +429,10 @@ class AppMoon(tq.App2):
         self.idle_since = time.time()
         self.stack = HeartStack()
         self.kirby_hop = -KIRBY_HOP
+        self.kb_scroll = {key: 0 for key, _, _ in KANBAN}
+        self.kb_cards = []        # (x1, y1, x2, y2, id) карточек на экране — для двойного клика
+        self.kb_drag = None       # перетаскивание карточки между колонками
+        self.details = None       # открытая карточка задачи
         self.star_jobs = []
         self.crane = self.load_asset("crane_empty.png") or self.load_asset("crane.png")
         claw = self.load_asset("crane_claw.png")
@@ -458,6 +466,9 @@ class AppMoon(tq.App2):
         self.build_entry()
 
         self.cv.bind("<Button-1>", self.on_click)
+        self.cv.bind("<B1-Motion>", self.kb_motion)
+        self.cv.bind("<ButtonRelease-1>", self.kb_release)
+        self.cv.bind("<Double-Button-1>", self.kb_double)
         self.cv.bind("<MouseWheel>", self.on_wheel)
         self.cv.bind("<Button-4>", lambda e: self.scroll_by(-1))
         self.cv.bind("<Button-5>", lambda e: self.scroll_by(1))
@@ -717,6 +728,8 @@ class AppMoon(tq.App2):
         self.draw_messenger(running, f, today)
         self.draw_particles()
         self.draw_cinna(running, f)
+        if self.kb_drag and self.kb_drag.get("active"):
+            self.cv.tag_raise("kbghost")
         if self.toast and self.toast[1] >= f:
             tw = max(220, len(self.toast[0]) * 8 + 40)
             x1, x2 = W / 2 - tw / 2, W / 2 + tw / 2
@@ -1060,8 +1073,13 @@ class AppMoon(tq.App2):
         self.hits.append((380, 512, 434, 540, lambda: (self.press("add"), self.add_task())))
 
         tasks = self.data["tasks"]
+        kanban = self.data.get("moon_view") == "kanban"
         self.uitext(56, 561, f"▾ Квесты ({len(tasks)})", T["msg_head"], 12, True)
-        if not tasks:
+        self.draw_view_tabs(kanban)
+        if kanban:
+            self.draw_kanban(running, f)
+            tasks = []   # список ниже не рисуем
+        elif not tasks:
             self.uitext(240, 650, "пока пусто… добавь квест ↑", T["msg_dim"], 12, True, anchor="center")
         for idx in range(self.scroll, min(len(tasks), self.scroll + self.ROWS)):
             t = tasks[idx]
@@ -1079,6 +1097,8 @@ class AppMoon(tq.App2):
                 col = "#7fd6b4" if idx % 2 else "#8f9cff"
                 self.sprite(PERSON, 64, y + 22, 2, color=col)
             name = t["name"] if len(t["name"]) <= 30 else t["name"][:29] + "…"
+            if self.status_of(t) == "done":
+                name = "✓ " + name
             self.uitext(80, y + 14, name, T["msg_run"] if is_run else T["msg"], 12, True)
             self.uitext(404, y + 14, fmt_hms(self.task_total(t["id"])),
                         T["msg_run"] if is_run else T["msg_dim"], 12, True, anchor="e")
@@ -1086,7 +1106,7 @@ class AppMoon(tq.App2):
             tid = t["id"]
             self.hits.append((50, y, 410, y + 28, lambda tid=tid: self.select(tid)))
             self.hits.append((411, y, 430, y + 28, lambda tid=tid: self.delete_task(tid)))
-        if len(tasks) > self.ROWS:
+        if not kanban and len(tasks) > self.ROWS:
             bar_h = self.ROWS * self.ROW_H - 4
             knob = max(16, bar_h * self.ROWS / len(tasks))
             pos = (bar_h - knob) * self.scroll / (len(tasks) - self.ROWS)
@@ -1103,6 +1123,203 @@ class AppMoon(tq.App2):
             status = "Пауза"
         self.uitext(62, 779, status, T["msg"], 11, True)
         self.uitext(434, 779, f"сегодня {fmt_hms(today)}", T["msg_dim"], 11, True, anchor="e")
+
+    # ── режим «Канбан» ────────────────────────────────────────────────────
+    def status_of(self, t):
+        r = self.data["running"]
+        return t.get("status") or ("doing" if r and r["task_id"] == t["id"] else "todo")
+
+    def set_view(self, view):
+        self.data["moon_view"] = view
+        self.save()
+
+    def draw_view_tabs(self, kanban):
+        """Вкладки «☰ Список | ▦ Канбан» в шапке списка, в стиле XP."""
+        for i, (view, label) in enumerate((("list", "☰ Список"), ("kanban", "▦ Канбан"))):
+            x2 = 430 - (1 - i) * 92
+            x1, y1, y2 = x2 - 88, 552, 570
+            on = (view == "kanban") == kanban
+            self.rect(x1, y1, x2, y2, M["xp_sel_line"] if on else M["xp_line"])
+            self.rect(x1 + 1, y1 + 1, x2 - 1, y2 - 1, M["xp_sel"] if on else M["xp_list"])
+            self.uitext((x1 + x2) / 2, (y1 + y2) / 2, label, T["msg_head"] if on else T["msg_dim"], 10, True,
+                        anchor="center")
+            self.hits.append((x1, y1, x2, y2, lambda view=view: self.set_view(view)))
+
+    def kb_columns(self):
+        x1, y1, x2, y2 = KB_AREA
+        w = (x2 - x1 - KB_GAP * (len(KANBAN) - 1)) / len(KANBAN)
+        return [(key, label, color, x1 + i * (w + KB_GAP), y1, x1 + i * (w + KB_GAP) + w, y2)
+                for i, (key, label, color) in enumerate(KANBAN)]
+
+    def kb_visible(self):
+        return int((KB_AREA[3] - KB_AREA[1] - KB_HEAD - 4) // KB_STEP)
+
+    def draw_kanban(self, running, f):
+        tasks = self.data["tasks"]
+        self.kb_cards = []
+        drag_id = self.kb_drag["id"] if self.kb_drag and self.kb_drag.get("active") else None
+        hover_col = self.kb_drag.get("over") if drag_id else None
+        for key, label, color, x1, y1, x2, y2 in self.kb_columns():
+            col_tasks = [t for t in tasks if self.status_of(t) == key]
+            tint = mix(color, "#ffffff", 0.80 if hover_col == key else 0.90)
+            self.rect(x1, y1, x2, y2, tint)
+            self.rect(x1, y1, x2, y1 + KB_HEAD, color)
+            self.uitext((x1 + x2) / 2, y1 + KB_HEAD / 2, f"{label} · {len(col_tasks)}", M["white"], 9, True,
+                        anchor="center")
+            if hover_col == key:
+                self.rect(x1, y1, x2, y1 + 2, M["white"])
+            vis = self.kb_visible()
+            top = self.kb_scroll[key] = max(0, min(self.kb_scroll[key], len(col_tasks) - vis))
+            for n, t in enumerate(col_tasks[top:top + vis]):
+                cy = y1 + KB_HEAD + 4 + n * KB_STEP
+                self.draw_card(t, x1 + 3, cy, x2 - 3, cy + KB_CARD, color, running, f, ghost=t["id"] == drag_id)
+            if len(col_tasks) > vis:   # тонкая полоса прокрутки колонки
+                bar = y2 - y1 - KB_HEAD - 4
+                knob = max(12, bar * vis / len(col_tasks))
+                pos = (bar - knob) * top / (len(col_tasks) - vis)
+                self.rect(x2 - 3, y1 + KB_HEAD + 2 + pos, x2 - 1, y1 + KB_HEAD + 2 + pos + knob, color)
+            if not col_tasks and key == "todo" and not tasks:
+                self.uitext((x1 + x2) / 2, y1 + 70, "добавь квест ↑", T["msg_dim"], 10, True, anchor="center")
+
+    def draw_card(self, t, x1, y1, x2, y2, color, running, f, ghost=False):
+        is_run = running and running["task_id"] == t["id"]
+        is_sel = t["id"] == self.data["selected"]
+        if ghost:   # карточку тащат — на месте остаётся пунктирный контур
+            self.cv.create_rectangle(x1, y1, x2, y2, outline=color, dash=(3, 2), tags=self.layer)
+            return
+        self.rect(x1, y1, x2, y2, color if is_sel else M["xp_line"])
+        self.rect(x1 + (2 if is_sel else 1), y1 + (2 if is_sel else 1), x2 - (2 if is_sel else 1),
+                  y2 - (2 if is_sel else 1), M["xp_list"])
+        self.rect(x1, y1, x1 + 3, y2, color)   # цветная кромка статуса
+        name = self.fit_text(t["name"], x2 - x1 - 26, 10)
+        self.uitext(x1 + 8, y1 + 11, name, T["msg_run"] if is_run else T["msg"], 10, True)
+        self.uitext(x1 + 8, y1 + 26, fmt_hms(self.task_total(t["id"])), T["msg_run"] if is_run else T["msg_dim"], 9, True)
+        if is_run:
+            self.sprite(HEART, x2 - 30, y1 + 31, 1.5 + 0.3 * abs(math.sin(f * 0.3)), pal=P3)
+        has_comment = bool(t.get("comment", "").strip())
+        self.uitext(x2 - 10, y1 + 26, "✎", color if has_comment else M["xp_line"], 11, True, anchor="center")
+        tid = t["id"]
+        self.kb_cards.append((x1, y1, x2, y2, tid))
+        self.hits.append((x1, y1, x2, y2, lambda tid=tid: self.kb_press(tid)))
+        self.hits.append((x2 - 18, y1 + 18, x2, y2, lambda tid=tid: self.open_details(tid)))
+
+    def fit_text(self, text, width, size):
+        fonts = self.__dict__.setdefault("_ui_fonts", {})
+        if size not in fonts:
+            fonts[size] = tkfont.Font(font=self.ui(size, True))
+        font = fonts[size]
+        if font.measure(text) <= width:
+            return text
+        while text and font.measure(text + "…") > width:
+            text = text[:-1]
+        return text.rstrip() + "…"
+
+    def kb_press(self, tid):
+        """Нажатие на карточку: если её не потащат, по отпусканию она выбирается (как клик в списке)."""
+        x = self.cv.winfo_pointerx() - self.cv.winfo_rootx()
+        y = self.cv.winfo_pointery() - self.cv.winfo_rooty()
+        self.kb_drag = {"id": tid, "x0": x, "y0": y, "active": False}
+
+    def kb_column_at(self, x, y):
+        for key, _, _, x1, y1, x2, y2 in self.kb_columns():
+            if x1 - KB_GAP / 2 <= x <= x2 + KB_GAP / 2 and y1 - 30 <= y <= y2 + 30:
+                return key
+        return None
+
+    def kb_motion(self, e):
+        d = self.kb_drag
+        if not d or self.data.get("moon_view") != "kanban":
+            return
+        if not d["active"]:
+            if abs(e.x - d["x0"]) + abs(e.y - d["y0"]) < 6:
+                return
+            d["active"] = True
+            t = self.task(d["id"])
+            col = next((c for k, _, c in KANBAN if k == self.status_of(t)), M["lilac"])
+            w = (KB_AREA[2] - KB_AREA[0]) / 3 - 10
+            # «призрак» карточки следует за мышью сразу, не дожидаясь кадра
+            self.cv.create_rectangle(0, 0, w, KB_CARD, fill=M["xp_list"], outline=col, width=2, tags=("kbghost", "kbg_box"))
+            self.cv.create_rectangle(0, 0, 3, KB_CARD, fill=col, outline="", tags=("kbghost", "kbg_edge"))
+            self.cv.create_text(8, KB_CARD / 2, text=self.fit_text(t["name"], w - 14, 10), fill=T["msg"],
+                                font=self.ui(10, True), anchor="w", tags=("kbghost", "kbg_text"))
+            d["w"] = w
+        w = d["w"]
+        x, y = e.x - w / 2, e.y - KB_CARD / 2
+        self.cv.coords("kbg_box", x, y, x + w, y + KB_CARD)
+        self.cv.coords("kbg_edge", x, y, x + 3, y + KB_CARD)
+        self.cv.coords("kbg_text", x + 8, y + KB_CARD / 2)
+        self.cv.tag_raise("kbghost")
+        d["over"] = self.kb_column_at(e.x, e.y)
+
+    def kb_release(self, e):
+        d, self.kb_drag = self.kb_drag, None
+        self.cv.delete("kbghost")
+        if d and d.get("active"):
+            target = self.kb_column_at(e.x, e.y)
+            if target:
+                self.set_status(d["id"], target)
+        elif d and d["id"] != self.data["selected"]:
+            self.select(d["id"])   # простой клик — выбрать квест (во время работы таймер переключится на него)
+
+    def set_status(self, tid, status):
+        t = self.task(tid)
+        if not t or self.status_of(t) == status:
+            return
+        t["status"] = status
+        r = self.data["running"]
+        if status == "done":
+            if r and r["task_id"] == tid:
+                self.stop()   # готово — таймер останавливается, время сохраняется
+            self.star_burst(380, 640, 8, (CRANE_STAR_PAL, WARP_STAR_PAL))
+            self.show_toast(f"Готово: {t['name'][:22]} ★", 30)
+        else:
+            self.show_toast(f"{dict((k, l) for k, l, _ in KANBAN)[status].capitalize()}: {t['name'][:22]}", 22)
+        self.save()
+
+    def kb_double(self, e):
+        if self.data.get("moon_view") != "kanban":
+            return
+        for x1, y1, x2, y2, tid in self.kb_cards:
+            if x1 <= e.x <= x2 and y1 <= e.y <= y2:
+                self.open_details(tid)
+                return
+
+    def open_details(self, tid):
+        t = self.task(tid)
+        if not t or self.details:
+            return
+        self.kb_drag = None
+        import task_details
+        self.details = task_details.TaskDetails(self, t, KANBAN, self.save_details)
+
+    def save_details(self, tid, name, status, comment):
+        t = self.task(tid)
+        if not t:
+            return
+        t["name"], t["comment"] = name, comment
+        self.save()
+        self.set_status(tid, status)
+
+    def start(self):
+        super().start()
+        r = self.data["running"]
+        t = self.task(r["task_id"]) if r else None
+        if t and self.status_of(t) != "doing":
+            t["status"] = "doing"   # взяли в работу — карточка переезжает в «В работе»
+            self.save()
+
+    def on_wheel(self, e):
+        if self.data.get("moon_view") == "kanban" and KB_AREA[1] <= e.y <= KB_AREA[3]:
+            key = self.kb_column_at(e.x, e.y)
+            if key and e.delta:
+                self.kb_scroll[key] += -1 if e.delta > 0 else 1
+            return
+        super().on_wheel(e)
+
+    def teardown(self):
+        if self.details:
+            self.details.close()
+        super().teardown()
 
     def update_particles(self):
         super().update_particles()
