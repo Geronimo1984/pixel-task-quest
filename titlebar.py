@@ -49,6 +49,24 @@ def mac_window_polish():
         pass
 
 
+def mac_native_drag():
+    """Перетаскивание окна силами macOS: окно двигает оконный сервер, плавно и без нагрузки на Tk.
+
+    Вызывается из обработчика нажатия кнопки мыши; возвращает False, если не получилось."""
+    if not _objc:
+        return False
+    try:
+        event = _send(_nsapp(), b"currentEvent")
+        window = _send(event, b"window") if event else None
+        # 1 — нажатие, 6 — движение с нажатой кнопкой (если скин был занят кадром, нажатие уже позади)
+        if not window or _send(event, b"type", ctypes.c_ulong) not in (1, 6):
+            return False
+        _send(window, b"performWindowDragWithEvent:", None, (ctypes.c_void_p,), event)
+        return True
+    except (AttributeError, OSError, ValueError):
+        return False
+
+
 def mac_hide_app(root):
     """«Свернуть»: окно без рамки нельзя убрать в Dock, поэтому прячем приложение целиком (как ⌘H)."""
     if _objc:
@@ -318,7 +336,7 @@ class TitleBar:
         name = self.button_at(e.x, e.y)
         if name:
             self.set_state(name, name)
-        elif self.draggable:
+        elif self.draggable and not mac_native_drag():
             self.drag = (e.x_root - self.root.winfo_x(), e.y_root - self.root.winfo_y())
 
     def on_drag(self, e):

@@ -419,12 +419,99 @@ class App2(pt.App):
                 p["vx"] = math.sin(p["life"] / 3 + p.get("ph", 0)) * 0.5
 
     # ── примитивы рисования (с поддержкой статичного слоя и обрезки) ───────
+    # Спрайты, пиксельный текст, кружки, блоки и пузыри собираются один раз в картинку и дальше выводятся
+    # одним элементом холста вместо десятков прямоугольников — кадр рисуется в разы быстрее.
+    def cached(self, key, w, h, paint):
+        cache = self.__dict__.setdefault("_img_cache", {})
+        img = cache.pop(key, None)
+        if img is None:
+            if len(cache) > 600:     # меняющиеся надписи (время) не копятся: убираем давно не нужные
+                for old in list(cache)[:200]:
+                    del cache[old]
+            img = tk.PhotoImage(width=max(1, w), height=max(1, h))
+            paint(img)
+        cache[key] = img             # недавно использованные — в конце очереди
+        return img
+
+    def sprite(self, rows, cx, bottom, sx=4.0, sy=None, color=None, flip=False, clip=None, pal=None):
+        if clip:
+            return self.sprite_rects(rows, cx, bottom, sx, sy, color, flip, clip, pal)
+        pal = pal or P2
+        sy = sy or sx
+        w, h = len(rows[0]), len(rows)
+
+        def paint(img):
+            for j, row in enumerate(rows):
+                row = row[::-1] if flip else row
+                i = 0
+                while i < w:
+                    ch = row[i]
+                    k = i + 1
+                    while k < w and row[k] == ch:
+                        k += 1
+                    x1, x2, y1, y2 = round(i * sx), round(k * sx), round(j * sy), round((j + 1) * sy)
+                    if ch != "." and x2 > x1 and y2 > y1:
+                        img.put(color or pal[ch], to=(x1, y1, x2, y2))
+                    i = k
+        img = self.cached(("spr", id(rows), sx, sy, color, flip, id(pal)), round(w * sx), round(h * sy), paint)
+        self.place(round(cx - w * sx / 2), round(bottom - h * sy), img)
+
+    def ptext(self, s, x, y, scale, color, anchor="w", shadow=None):
+        glyphs = [FONT.get(ch, FONT["?"]) for ch in s.upper()]
+        total = sum(len(g[0]) for g in glyphs) * scale + (len(glyphs) - 1) * scale
+        off = max(1, scale // 2 + 1) if shadow else 0
+
+        def paint(img):
+            for o, col in ([(off, shadow)] if shadow else []) + [(0, color)]:
+                cx = 0
+                for g in glyphs:
+                    for j, row in enumerate(g):
+                        for i, ch in enumerate(row):
+                            if ch == "#":
+                                img.put(col, to=(round(cx + i * scale + o), round(j * scale + o),
+                                                 round(cx + (i + 1) * scale + o), round((j + 1) * scale + o)))
+                    cx += (len(g[0]) + 1) * scale
+        img = self.cached(("txt", s.upper(), scale, color, shadow), round(total + off), round(7 * scale + off), paint)
+        x -= total / 2 if anchor == "center" else total if anchor == "e" else 0
+        self.place(round(x), round(y), img)
+        return total
+
+    def begin_static(self):
+        """Неподвижный фон рисуется в одну картинку: Tk не перебирает сотни элементов в каждом кадре."""
+        self.layer = "static"
+        self.bg_img = tk.PhotoImage(width=int(self.cv["width"]), height=int(self.cv["height"]))
+        self.cv.create_image(0, 0, image=self.bg_img, anchor="nw", tags="static")
+
+    def place(self, x, y, img):
+        """Картинка на холст, а в статичном слое — прямо в общую картинку фона."""
+        if self.layer == "static" and getattr(self, "bg_img", None):
+            fx, fy = max(0, -x), max(0, -y)
+            if fx < img.width() and fy < img.height():
+                self.bg_img.tk.call(self.bg_img, "copy", img, "-from", fx, fy, img.width(), img.height(),
+                                    "-to", x + fx, y + fy)
+        else:
+            self.cv.create_image(x, y, image=img, anchor="nw", tags=self.layer)
+
     def rect(self, x1, y1, x2, y2, fill, outline="", width=0, clip=None):
+        if self.layer == "static" and getattr(self, "bg_img", None) and not outline:
+            x1, y1 = max(0, round(x1)), max(0, round(y1))
+            x2, y2 = min(self.bg_img.width(), round(x2)), min(self.bg_img.height(), round(y2))
+            if x2 > x1 and y2 > y1:
+                self.bg_img.put(fill, to=(x1, y1, x2, y2))
+            return
         if clip:
             x1, y1, x2, y2 = max(x1, clip[0]), max(y1, clip[1]), min(x2, clip[2]), min(y2, clip[3])
             if x1 >= x2 or y1 >= y2:
                 return
         self.cv.create_rectangle(x1, y1, x2, y2, fill=fill, outline=outline, width=width, tags=self.layer)
+
+    def bubble(self, cx, cy, r):
+        def paint(img):
+            for i, j, col in RINGS[r]:
+                img.put(col, to=(i + r, j + r, i + r + 1, j + r + 1))
+            img.put("#ffffff", to=(r - r // 2, r - r // 2, r - r // 2 + 1, r - r // 2 + 1))
+        img = self.cached(("bub", r), 2 * r + 1, 2 * r + 1, paint)
+        self.place(cx - r, cy - r, img)
 
     def text(self, x, y, s, color, size=12, anchor="center", shadow=None):
         if shadow:
@@ -432,7 +519,8 @@ class App2(pt.App):
                                 tags=self.layer)
         self.cv.create_text(x, y, text=s, fill=color, font=self.font(size), anchor=anchor, tags=self.layer)
 
-    def sprite(self, rows, cx, bottom, sx=4.0, sy=None, color=None, flip=False, clip=None, pal=None):
+    def sprite_rects(self, rows, cx, bottom, sx=4.0, sy=None, color=None, flip=False, clip=None, pal=None):
+        """Спрайт прямоугольниками — только для обрезанных спрайтов (clip)."""
         pal = pal or P2
         sy = sy or sx
         w, h = len(rows[0]), len(rows)
@@ -452,33 +540,6 @@ class App2(pt.App):
                 self.rect(round(x0 + i * sx), round(y0 + j * sy), round(x0 + k * sx), round(y0 + (j + 1) * sy),
                           color or pal[ch], clip=clip)
                 i = k
-
-    def ptext(self, s, x, y, scale, color, anchor="w", shadow=None):
-        glyphs = [FONT.get(ch, FONT["?"]) for ch in s.upper()]
-        widths = [len(g[0]) for g in glyphs]
-        total = sum(widths) * scale + (len(glyphs) - 1) * scale
-        if anchor == "center":
-            x -= total / 2
-        elif anchor == "e":
-            x -= total
-        passes = ([(max(1, scale // 2 + 1), shadow)] if shadow else []) + [(0, color)]
-        for off, col in passes:
-            cx = x
-            for g, w in zip(glyphs, widths):
-                for j, row in enumerate(g):
-                    i = 0
-                    while i < w:
-                        if row[i] != "#":
-                            i += 1
-                            continue
-                        k = i
-                        while k < w and row[k] == "#":
-                            k += 1
-                        self.rect(cx + i * scale + off, y + j * scale + off,
-                                  cx + k * scale + off, y + (j + 1) * scale + off, col)
-                        i = k
-                cx += (w + 1) * scale
-        return total
 
     def neon(self, x1, y1, x2, y2, fill=N["panel"]):
         self.rect(x1 - 2, y1 - 2, x2 + 2, y2 + 2, mix(N["pink"], N["bg"], 0.6))
@@ -536,7 +597,7 @@ class App2(pt.App):
 
     # ── статичный слой: рисуется один раз ─────────────────────────────────
     def draw_static(self):
-        self.layer = "static"
+        self.begin_static()
         rnd = random.Random(2000)
 
         # фон в точку, как полутоновая печать

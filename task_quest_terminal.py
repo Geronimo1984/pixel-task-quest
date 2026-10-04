@@ -173,12 +173,24 @@ class AppTerminal(tq.App2):
         cells = [(gx + i * scale, gy + j * scale)
                  for g, (gx, gy) in zip(glyphs, positions)
                  for j, row in enumerate(g) for i, px in enumerate(row) if px == "#"]
-        for cx, cy in cells:
-            self.rect(cx - 2, cy - 2, cx + scale + 2, cy + scale + 2, G["glow"])
+        if not cells:
+            return
+        # надпись собирается в картинку один раз (свечение + штрихи) и дальше выводится одним элементом
+        ox, oy = round(min(c[0] for c in cells)) - 2, round(min(c[1] for c in cells)) - 2
+        w = round(max(c[0] for c in cells)) + scale + 2 - ox
+        h = round(max(c[1] for c in cells)) + scale + 2 - oy
         bar = max(1, scale // 3)
-        for cx, cy in cells:
-            for k in range(0, scale, bar + 1):
-                self.rect(cx + k, cy, cx + k + bar, cy + scale, color)
+
+        def paint(img):
+            for cx, cy in cells:
+                img.put(G["glow"], to=(round(cx) - 2 - ox, round(cy) - 2 - oy, round(cx) + scale + 2 - ox,
+                                       round(cy) + scale + 2 - oy))
+            for cx, cy in cells:
+                for k in range(0, scale, bar + 1):
+                    img.put(color, to=(round(cx) + k - ox, round(cy) - oy, round(cx) + k + bar - ox,
+                                       round(cy) + scale - oy))
+        key = ("stext", s.upper(), scale, color, vertical, round(x - ox) if not vertical else 0, anchor)
+        self.place(ox, oy, self.cached(key + (w, h), w, h, paint))
 
     def term_button(self, name, x1, y1, x2, y2, label, cb, size=12, active=False):
         down = self.pressed.get(name, -1) >= self.f
@@ -191,7 +203,7 @@ class AppTerminal(tq.App2):
 
     # ── статичный слой ────────────────────────────────────────────────────
     def draw_static(self):
-        self.layer = "static"
+        self.begin_static()
         for y in range(0, H, 3):  # строки развёртки
             self.rect(0, y, W, y + 1, G["scan"])
         self.stext("QUEST", 40, 22, 8, G["bright"], vertical=True)
@@ -322,17 +334,34 @@ class AppTerminal(tq.App2):
             x = 90 + len(shown) * cw + 3
             self.rect(x, 39, x + 8, 54, G["bright"])
 
+    def eye_color(self, b):
+        cache = self.__dict__.setdefault("_eye_colors", {})
+        k = round(b * 32)
+        if k not in cache:
+            cache[k] = mix(G["dim"], G["hot"], k / 32)
+        return cache[k]
+
     def draw_eye(self, running, f, glitch):
         x1, y1, x2, y2 = EYE_PANEL
         self.rect(x1, y1, x2, y2, G["bg"])
+        if getattr(self, "eye_img", None) is None:
+            self.eye_img = tk.PhotoImage(width=x2 - x1, height=y2 - y1)
+        img = self.eye_img
+        img.blank()
+
+        def put(ax, ay, bx, by, col):
+            ax, ay = max(0, round(ax) - x1), max(0, round(ay) - y1)
+            bx, by = min(x2 - x1, round(bx) - x1), min(y2 - y1, round(by) - y1)
+            if bx > ax and by > ay:
+                img.put(col, to=(ax, ay, bx, by))
         for x in range(x1, x2, 6):  # пунктирная рамка, как у плаката
-            self.rect(x, y1, x + 3, y1 + 1, G["mid"])
-            self.rect(x, y2 - 1, x + 3, y2, G["mid"])
+            put(x, y1, x + 3, y1 + 1, G["mid"])
+            put(x, y2 - 1, x + 3, y2, G["mid"])
         self.gtext(x1 + 4, y1 + 12, "WATCHING YOUR TIME", G["mid"], 10)
         for k in range(3):
             cx = x2 - 14 - k * 18
             for i, j in ((0, -4), (-4, 0), (4, 0), (0, 4), (0, 0)):
-                self.rect(cx + i - 1, y1 + 12 + j - 1, cx + i + 2, y1 + 12 + j + 2, G["mid"])
+                put(cx + i - 1, y1 + 12 + j - 1, cx + i + 2, y1 + 12 + j + 2, G["mid"])
 
         # насколько открыт глаз и куда смотрит
         pupil = 15
@@ -347,6 +376,7 @@ class AppTerminal(tq.App2):
             o = 0.38 if 70 <= k < 96 else 0.07  # дремлет, иногда приоткрывает глаз
             ix, iy = EYE_CX + (math.sin(f * 0.2) * 40 if o > 0.1 else 0), EYE_CY
 
+        # полутоновые точки, рамка и веки рисуются в одну картинку: тысяча точек — один элемент холста
         bands = {}
         for x, y, v in EYE_DOTS:
             if abs(v) > o:
@@ -359,22 +389,26 @@ class AppTerminal(tq.App2):
             b = eye_brightness(x, y, v, ix, iy, pupil)
             s = EYE_STEP * b * 0.95
             if s >= 1:
-                self.rect(x - s / 2, y - s / 2, x + s / 2, y + s / 2, mix(G["dim"], G["hot"], b))
+                ax, ay = round(x - s / 2) - x1, round(y - s / 2) - y1
+                bx, by = round(x + s / 2) - x1, round(y + s / 2) - y1
+                if bx > ax and by > ay and ax >= 0 and ay >= 0 and bx <= x2 - x1 and by <= y2 - y1:
+                    img.put(self.eye_color(b), to=(ax, ay, bx, by))
         for x in range(EYE_CX - EYE_HW, EYE_CX + EYE_HW, 4):  # веки
             hh = eye_halfheight(x - EYE_CX + 2)
-            self.rect(x, EYE_CY - o * hh - 2, x + 4, EYE_CY - o * hh + 1, G["bright"])
-            self.rect(x, EYE_CY + o * hh, x + 4, EYE_CY + o * hh + 2, G["mid"])
+            put(x, EYE_CY - o * hh - 2, x + 4, EYE_CY - o * hh + 1, G["bright"])
+            put(x, EYE_CY + o * hh, x + 4, EYE_CY + o * hh + 2, G["mid"])
             if o < 0.2 and x % 16 == 0 and abs(x - EYE_CX) < EYE_HW - 30:
-                self.rect(x, EYE_CY + 3, x + 2, EYE_CY + 10, G["mid"])  # ресницы спящего глаза
+                put(x, EYE_CY + 3, x + 2, EYE_CY + 10, G["mid"])  # ресницы спящего глаза
         if not running and not glitch and f % 30 == 0:
             self.particles.append({"kind": "z", "x": EYE_CX + 120, "y": EYE_CY - 20, "vx": 0, "vy": -0.8,
                                    "life": 26})
         if glitch:
             for _ in range(3):
                 gy = random.randint(y1 + 20, y2 - 20)
-                self.rect(x1, gy, x2, gy + random.randint(3, 9), G["bright"])
+                put(x1, gy, x2, gy + random.randint(3, 9), G["bright"])
             self.gtext(random.randint(x1 + 10, x2 - 140), random.randint(y1 + 30, y2 - 20),
                        random.choice(("ERR0R", "S1GNAL L0ST", "WHO'S THERE?", "0x00FF")), G["hot"], 12, bold=True)
+        self.cv.create_image(x1, y1, image=img, anchor="nw", tags=self.layer)
         self.hits.append((EYE_CX - EYE_HW, EYE_CY - EYE_HH, EYE_CX + EYE_HW, EYE_CY + EYE_HH, self.poke_eye))
 
     def draw_list(self, running, f):

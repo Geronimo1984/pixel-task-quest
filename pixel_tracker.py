@@ -970,10 +970,18 @@ class App:
             x += (w + 1) * scale
 
     def tick(self):
+        """Кадр анимации. Следующий кадр — по расписанию раз в FPS_MS, а не «через FPS_MS после отрисовки»:
+        время на отрисовку не растягивает анимацию, и она идёт ровно."""
+        now = time.perf_counter()
+        nxt = getattr(self, "_next_frame", now) + FPS_MS / 1000
+        if nxt < now:              # не успели (окно было занято) — не догоняем пачкой кадров
+            nxt = now + FPS_MS / 1000 * 0.5
+        self._next_frame = nxt
         self.f += 1
         self.update_particles()
         self.redraw()
-        self._after = self.root.after(FPS_MS, self.tick)
+        delay = max(1, int((nxt - time.perf_counter()) * 1000))
+        self._after = self.root.after(delay, self.tick)
 
 
 # ── Защита от одновременного запуска (обе версии пишут в один файл данных) ──

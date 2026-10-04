@@ -180,19 +180,19 @@ class AppMD(tq.App2):
     # ── статичный слой ────────────────────────────────────────────────────
     def draw_static(self):
         cv = self.cv
-        cv.create_image(0, 0, image=self.bg, anchor="nw", tags="static")
+        self.begin_static()   # картридж и градиент панели — одна картинка фона
+        self.place(0, 0, self.bg)
+        for i in range(H - PANEL_Y):   # нижняя панель — тёмный прозрачный пластик с голубым отблеском
+            self.rect(0, PANEL_Y + i, W, PANEL_Y + i + 1, pt.mix(C["panel2"], C["panel"], i / (H - PANEL_Y)))
+        self.rect(0, PANEL_Y, W, PANEL_Y + 1, C["cyan_dim"])
         self.disc_item = cv.create_image(*DISC_CENTER, tags="static")
         cv.create_image(*HUB_AT, image=self.hub, tags="static")
         cv.create_image(*SHUTTER_AT, image=self.shutter, anchor="nw", tags="static")
-        # нижняя панель — тёмный прозрачный пластик с голубым отблеском
-        for i in range(H - PANEL_Y):
-            cv.create_line(0, PANEL_Y + i, W, PANEL_Y + i, fill=pt.mix(C["panel2"], C["panel"], i / (H - PANEL_Y)),
-                           tags="static")
-        cv.create_line(0, PANEL_Y, W, PANEL_Y, fill=C["cyan_dim"], tags="static")
         x1, y1, x2, y2 = 12, LIST_TOP - 22, 468, LIST_TOP + ROWS * ROW_H + 4
         cv.create_rectangle(x1, y1, x2, y2, outline=C["line"], tags="static")
         cv.create_text(20, y1 + 11, text="TRACK LIST", fill=C["cyan"], font=self.sans(10), anchor="w", tags="static")
         cv.create_text(460, y1 + 11, text="TIME", fill=C["cyan"], font=self.sans(10), anchor="e", tags="static")
+        self.layer = "dyn"
 
     def build_entry(self):
         self.entry = tk.Entry(self.root, font=self.sans(13, False), bg=C["ink"], fg=C["text"],
@@ -336,11 +336,14 @@ class AppMD(tq.App2):
                     cv.create_text(x1 + 4, (y1 + y2) / 2, text="►", fill=C["cyan"], font=self.sans(8), anchor="w",
                                    tags=self.layer)
             else:       # брашированный металл, как рамка ярлыка
-                for i in range(y2 - y1):
-                    t = i / (y2 - y1 - 1)
-                    col = pt.mix(C["silver2"], C["silver1"], t) if down else pt.mix(C["silver1"], C["silver2"], t)
-                    cv.create_line(x1, y1 + i, x2, y1 + i, fill=col, tags=self.layer)
-                cv.create_rectangle(x1, y1, x2, y2, outline=C["silver_edge"], tags=self.layer)
+                def paint(img, w=x2 - x1 + 1, h=y2 - y1 + 1):
+                    for i in range(h):
+                        t = i / (h - 1)
+                        col = pt.mix(C["silver2"], C["silver1"], t) if down else pt.mix(C["silver1"], C["silver2"], t)
+                        img.put(col, to=(0, i, w, i + 1))
+                    for edge in ((0, 0, w, 1), (0, h - 1, w, h), (0, 0, 1, h), (w - 1, 0, w, h)):
+                        img.put(C["silver_edge"], to=edge)
+                self.place(x1, y1, self.cached(("btn", x2 - x1, y2 - y1, down), x2 - x1 + 1, y2 - y1 + 1, paint))
                 on = (name == "top" and self.topmost)
                 cv.create_text((x1 + x2) / 2, (y1 + y2) / 2 + (1 if down else 0), text=label,
                                fill="#0a5a70" if on else C["ink"], font=self.sans(11), tags=self.layer)

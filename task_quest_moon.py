@@ -509,8 +509,11 @@ class AppMoon(tq.App2):
         self.cv.create_text(x, y, text=s, fill=color, font=self.ui(size, bold), anchor=anchor, tags=self.layer)
 
     def disk(self, cx, cy, r, s, color):
-        for i, j in DISKS[r]:
-            self.rect(cx + i * s - s / 2, cy + j * s - s / 2, cx + i * s + s / 2, cy + j * s + s / 2, color)
+        def paint(img):
+            for i, j in DISKS[r]:
+                img.put(color, to=(round((i + r) * s), round((j + r) * s), round((i + r + 1) * s), round((j + r + 1) * s)))
+        img = self.cached(("disk", r, s, color), round((2 * r + 1) * s), round((2 * r + 1) * s), paint)
+        self.place(round(cx - r * s - s / 2), round(cy - r * s - s / 2), img)
 
     def round_button(self, cx, cy, color, down=False):
         self.disk(cx, cy, 6, 2, pt.App.darken(color, 0.45))
@@ -519,13 +522,19 @@ class AppMoon(tq.App2):
             self.rect(cx - 6, cy - 8, cx - 1, cy - 3, lighten(color, 0.6))
 
     def block(self, x, y, color, s=CELL):
-        self.rect(x, y, x + s, y + s, pt.App.darken(color, 0.4))
-        self.rect(x + 2, y + 2, x + s - 2, y + s - 2, color)
-        self.rect(x + 2, y + 2, x + s - 2, y + 4, lighten(color, 0.45))
+        img = self.cached(("blk", color, s), s, s, lambda im: self.block_rects(0, 0, color, s, im))
+        self.place(round(x), round(y), img)
+
+    @staticmethod
+    def block_rects(x, y, color, s, img):
+        put = lambda x1, y1, x2, y2, col: img.put(col, to=(round(x1), round(y1), round(x2), round(y2)))
+        put(x, y, x + s, y + s, pt.App.darken(color, 0.4))
+        put(x + 2, y + 2, x + s - 2, y + s - 2, color)
+        put(x + 2, y + 2, x + s - 2, y + 4, lighten(color, 0.45))
         k = s / 20  # сердечко 5×4 внутри блока
         hx, hy, lc = x + 5 * k, y + 6 * k, lighten(color, 0.3)
         for x1, y1, x2, y2 in ((2, 0, 4, 2), (6, 0, 8, 2), (0, 2, 10, 4), (2, 4, 8, 6), (4, 6, 6, 8)):
-            self.rect(hx + x1 * k, hy + y1 * k, hx + x2 * k, hy + y2 * k, lc)
+            put(hx + x1 * k, hy + y1 * k, hx + x2 * k, hy + y2 * k, lc)
 
     def cab_panel(self, x1, y1, x2, y2, label=None):
         self.rect(x1, y1, x2, y2, M["frame"])
@@ -562,7 +571,8 @@ class AppMoon(tq.App2):
 
     # ── статичный слой ────────────────────────────────────────────────────
     def draw_static(self):
-        self.layer = "static"
+        """Весь неподвижный фон собирается в одну картинку: Tk не перебирает сотни элементов в каждом кадре."""
+        self.begin_static()
         rnd = random.Random(1999)
 
         # ночное небо, звёзды, луна, город
@@ -880,9 +890,7 @@ class AppMoon(tq.App2):
             d = b["d"] + math.sin(f * 0.11 + b["ph"]) * 1.7
             r = max(2, min(5, b["r"] + round(math.sin(f * 0.08 + b["ph"]))))
             bx, by = round(x + math.cos(a) * d), round(y + math.sin(a) * d)
-            for i, j, col in tq.RINGS[r]:
-                self.rect(bx + i, by + j, bx + i + 1, by + j + 1, col)
-            self.rect(bx - r // 2, by - r // 2, bx - r // 2 + 1, by - r // 2 + 1, M["white"])
+            self.bubble(bx, by, r)
         if f % 7 == 0:
             a = random.uniform(0, math.tau)
             self.particles.append({"kind": "bubble", "x": round(x + math.cos(a) * CINNA_R),
@@ -1120,10 +1128,7 @@ class AppMoon(tq.App2):
                 if (p["life"] + int(p["ph"] * 3)) % 9 == 0:
                     self.msprite(SPARKLE, p["x"] + 10, p["y"] - 12, 2)
             elif k == "bubble":
-                for i, j, col in tq.RINGS[p["r"]]:
-                    self.rect(p["x"] + i, p["y"] + j, p["x"] + i + 1, p["y"] + j + 1, col)
-                self.rect(p["x"] - p["r"] // 2, p["y"] - p["r"] // 2, p["x"] - p["r"] // 2 + 1,
-                          p["y"] - p["r"] // 2 + 1, M["white"])
+                self.bubble(round(p["x"]), round(p["y"]), p["r"])
 
 
 def main():
