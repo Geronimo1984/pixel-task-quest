@@ -8,3 +8,5 @@ __pycache__/
 .DS_Store
 tracker_backup_*.json
 *.lock
+# треки для пасхалки MiniDisc — чужая музыка, только локально
+*.mp3

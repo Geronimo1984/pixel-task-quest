@@ -12,10 +12,13 @@
 
 Запуск:  python3 task_quest.py md
 """
+import atexit
+import glob
 import math
 import os
 import random
 import shutil
+import subprocess
 import threading
 import time
 import tkinter as tk
@@ -66,6 +69,8 @@ LIST_TOP, ROW_H, ROWS = PANEL_Y + 104, 26, 6
 
 
 class AppMD(tq.App2):
+    player = None   # процесс afplay текущего трека (пасхалка)
+
     ROWS = ROWS
     ROW_H = ROW_H
     LIST_TOP = LIST_TOP
@@ -201,11 +206,49 @@ class AppMD(tq.App2):
         self.show_toast(DISC_TITLES[self.current_disc()].upper(), 30)
 
     def scratch(self):
-        """Клик по диску — «скретч» назад и смена диска (отсчёт 20 секунд начинается заново)."""
+        """Клик по диску — «скретч» назад и смена диска (отсчёт 20 секунд начинается заново).
+        Пасхалка: на каждый второй клик играет случайный трек из папки программы."""
         self.disc_speed = -260
         self.spin()
         self.next_disc()
         self.disc_switch_at = time.time() + DISC_EVERY_SEC
+        self.disc_clicks = getattr(self, "disc_clicks", 0) + 1
+        if self.disc_clicks % 2 == 0:
+            self.play_random_track()
+
+    # ── пасхалка: музыка ──────────────────────────────────────────────────
+    @staticmethod
+    def tracks():
+        """mp3 в папке программы (и в assets/tracks). В git они не попадают — см. .gitignore."""
+        found = glob.glob(os.path.join(pt.APP_DIR, "*.mp3")) + glob.glob(os.path.join(ASSETS, "tracks", "*.mp3"))
+        return sorted(set(found))
+
+    @staticmethod
+    def track_title(path):
+        name = os.path.splitext(os.path.basename(path))[0]
+        return name.split(" [")[0].replace(" - ", " · ").strip()   # «Artist - Title [сайт]» → «Artist · Title»
+
+    def play_random_track(self):
+        tracks = self.tracks()
+        player = shutil.which("afplay")   # встроенный проигрыватель macOS
+        if not tracks or not player:
+            return
+        last = getattr(self, "last_track", None)
+        choice = random.choice([t for t in tracks if t != last] or tracks)
+        self.stop_track()
+        try:
+            AppMD.player = subprocess.Popen([player, choice], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except OSError:
+            return
+        self.last_track = choice
+        self.show_toast("♪ " + self.track_title(choice).upper(), 45)
+
+    @staticmethod
+    def stop_track():
+        proc = getattr(AppMD, "player", None)
+        if proc and proc.poll() is None:
+            proc.terminate()
+        AppMD.player = None
 
     @staticmethod
     def disc_path(name):
@@ -284,6 +327,7 @@ class AppMD(tq.App2):
             self.keys["disc"] = str(img)
 
     def teardown(self):
+        self.stop_track()   # при смене скина музыка не играет дальше
         if self.native:
             self.native.remove()
             self.native = None
@@ -540,6 +584,9 @@ class AppMD(tq.App2):
             elif p["kind"] in ("sparkle", "heart"):
                 self.cv.create_text(p["x"], p["y"], text="✦" if p["kind"] == "sparkle" else "♥", fill=C["cyan"],
                                     font=self.sans(10), tags=self.layer)
+
+
+atexit.register(AppMD.stop_track)   # закрыли программу — трек тоже замолкает
 
 
 def main():
