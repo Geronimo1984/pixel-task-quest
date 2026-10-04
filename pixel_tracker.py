@@ -485,7 +485,8 @@ class App:
         t = self.task(tid)
         if not t:
             return
-        if not messagebox.askyesno("Удалить квест", f"Удалить «{t['name']}» вместе со всей историей времени?"):
+        if not self.ask("DELETE?", "Удалить квест?", f"«{t['name']}» будет удалён вместе со всей историей времени.",
+                        [("Удалить", True), ("Отмена", None)], default=1):
             return
         if self.data["running"] and self.data["running"]["task_id"] == tid:
             self.data["running"] = None
@@ -507,10 +508,10 @@ class App:
         if not self.data["sessions"] and not self.data["running"]:
             self.show_toast("Время и так на нуле", 20)
             return
-        if not messagebox.askyesno(
-                "Сбросить время",
-                f"Обнулить время у всех квестов ({n})?\n\n"
-                "Сами квесты останутся в списке. Перед сбросом я сохраню резервную копию рядом с программой."):
+        if not self.ask("RESET TIME", "Сбросить время?",
+                        f"Время у всех квестов ({n}) станет нулевым. Сами квесты останутся в списке, "
+                        "а перед сбросом я сохраню резервную копию рядом с программой.",
+                        [("Сбросить", True), ("Отмена", None)], default=1):
             return
         backup = os.path.join(os.path.dirname(DATA_FILE),
                               f"tracker_backup_{datetime.now():%Y-%m-%d_%H-%M-%S}.json")
@@ -568,15 +569,25 @@ class App:
         self.save()
         self.show_toast("Цифровой дождь: " + ("ВКЛ" if self.data["rain"] else "ВЫКЛ"), 20)
 
+    def ask(self, title, heading, text, buttons, default=0):
+        """Вопрос пользователю: окно в стиле текущего скина (dialogs.py). Возвращает значение кнопки или None."""
+        try:
+            import dialogs
+            return dialogs.ask(self, title, heading, text, buttons, default)
+        except (ImportError, tk.TclError):   # запасной вариант — системное окно
+            values = [v for _, v in buttons]
+            ok = messagebox.askyesno(heading, text)
+            return values[0] if ok else None
+
     def on_close(self):
         if self.data["running"]:
-            ans = messagebox.askyesnocancel(
-                "Таймер идёт",
-                "Остановить таймер и сохранить время?\n\n"
-                "Да — остановить\nНет — выйти, таймер продолжит идти до следующего запуска")
+            ans = self.ask("EXIT", "Таймер идёт",
+                           "Остановить таймер и сохранить время? Или выйти, а таймер продолжит идти "
+                           "до следующего запуска.",
+                           [("Остановить", "stop"), ("Не останавливать", "keep"), ("Отмена", None)])
             if ans is None:
                 return
-            if ans:
+            if ans == "stop":
                 self.stop()
         self.save()
         release_lock()

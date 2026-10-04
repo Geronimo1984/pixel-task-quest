@@ -95,6 +95,11 @@ class Style:
     def background(self, w, title):
         pass
 
+    @staticmethod
+    def dialog_title(title):
+        """Заголовок всплывающего окна на баре (пиксельный шрифт — латиница)."""
+        return title
+
     def button(self, name, x1, y1, x2, y2, hover, down):
         pass
 
@@ -179,6 +184,10 @@ class TerminalStyle(Style):
     bg = "#000000"
     buttons_left = False
     button_w = 34
+
+    @staticmethod
+    def dialog_title(title):
+        return title.lower().replace(" ", "_").rstrip("?") + ".exe"   # «C:\QUEST> delete.exe»
     picker = {"title": "skins.exe", "bg": "#000000", "hover": "#39ff6a", "hover_line": "#39ff6a", "text": "#39ff6a",
               "sub": "#1fae48", "hover_text": "#000000", "hover_sub": "#03120a", "check": "#c4ffd2",
               "border": "#1fae48", "font": "mono"}

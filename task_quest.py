@@ -338,7 +338,12 @@ def main(skin=None):
     root = tk.Tk()
     if not pt.acquire_lock():
         root.withdraw()
-        pt.messagebox.showinfo("Task Quest уже открыт", "Трекер уже запущен — переключись на его окно.")
+        try:   # сообщение в стиле последнего скина
+            import dialogs
+            dialogs.info_window(root, saved_skin(), "ALREADY OPEN", "Task Quest уже открыт",
+                                "Трекер уже запущен — переключись на его окно.")
+        except tk.TclError:
+            pt.messagebox.showinfo("Task Quest уже открыт", "Трекер уже запущен — переключись на его окно.")
         root.destroy()
         return
     Shell(root, skin or saved_skin())
