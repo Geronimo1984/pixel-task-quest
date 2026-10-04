@@ -397,7 +397,7 @@ class AppMD(tq.App2):
             caption = self.toast[0]
         else:
             caption = (sel["name"] if sel else "НЕТ ТРЕКА").upper()
-        caption = caption if len(caption) <= 16 else caption[:15] + "…"
+        caption = caption if len(caption) <= 40 else caption[:39] + "…"
         status = ("● REC" if (f // 6) % 2 else "○ REC") if running else "❚❚ PAUSE"
         self.section("label", (fmt_hms(shown), caption, status), lambda: self.draw_label(fmt_hms(shown), caption,
                                                                                          status, running))
@@ -428,12 +428,49 @@ class AppMD(tq.App2):
                        font=self.sans(10), anchor="w", tags=self.layer)
         cv.create_text(x2 - 8, y1 + 54, text=time_text, fill=C["label"], font=self.sans(28), anchor="e",
                        tags=self.layer)
-        spaced = " ".join(caption)   # разрядка, как «L A P I S I A»
-        size = 11
-        while size > 7 and tkfont.Font(family=self.sans(size)[0], size=size, weight="bold").measure(spaced) > x2 - x1 - 16:
-            size -= 1
-        cv.create_text(x2 - 8, y1 + 88, text=spaced, fill=C["label_dim"], font=self.sans(size), anchor="e",
-                       tags=self.layer)
+        width = x2 - x1 - 16
+        lines, size = self.fit_caption(caption, width)
+        ys = (y1 + 88,) if len(lines) == 1 else (y1 + 81, y1 + 96)
+        for text, y in zip(lines, ys):
+            cv.create_text(x2 - 8, y, text=text, fill=C["label_dim"], font=self.sans(size), anchor="e",
+                           tags=self.layer)
+
+    def measure(self, text, size):
+        fonts = self.__dict__.setdefault("_fonts", {})
+        if size not in fonts:
+            fonts[size] = tkfont.Font(family=self.sans(size)[0], size=size, weight="bold")
+        return fonts[size].measure(text)
+
+    def fit_caption(self, caption, width):
+        """Подпись вразрядку («L A P I S I A»): в одну строку, а если не влезает — в две, с переносом по словам."""
+        spaced = lambda t: " ".join(t)
+        for size in (11, 10, 9):
+            if self.measure(spaced(caption), size) <= width:
+                return [spaced(caption)], size
+        words = caption.split()
+        if len(words) > 1:   # перенос по словам: ищем разбиение с самыми ровными строками
+            best = None
+            for k in range(1, len(words)):
+                a, b = " ".join(words[:k]).rstrip(" ·"), " ".join(words[k:]).lstrip("· ")
+                if not a or not b:
+                    continue
+                wide = max(self.measure(spaced(a), 9), self.measure(spaced(b), 9))
+                if best is None or wide < best[0]:
+                    best = (wide, a, b)
+            if best:
+                _, a, b = best
+                for size in (10, 9, 8):
+                    if max(self.measure(spaced(a), size), self.measure(spaced(b), size)) <= width:
+                        return [spaced(a), spaced(b)], size
+                return [spaced(a), self.clip(spaced(b), 8, width)], 8
+        # одно длинное слово — делим пополам
+        half = (len(caption) + 1) // 2
+        return [spaced(caption[:half]), self.clip(spaced(caption[half:]), 8, width)], 8
+
+    def clip(self, text, size, width):
+        while text and self.measure(text + "…", size) > width:
+            text = text[:-1].rstrip()
+        return text + "…" if text else text
 
     def draw_buttons(self, running, f):
         cv = self.cv
