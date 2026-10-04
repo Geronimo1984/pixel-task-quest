@@ -42,6 +42,7 @@ DISC_CENTER, DISC_SIZE, DISC_FRAMES = (222, 220), 420, 24   # диск MiniDisc 
 HUB_AT, SHUTTER_AT = (222, 220), (282, 150)
 LABEL = (300, 171, 468, 276)                                 # чёрное окошко ярлыка на шторке
 PANEL_Y = 466                                                # нижняя панель — под картриджем
+DISC_EVERY_SEC = 20                                          # пока идёт таймер, диск меняется сам
 
 C = {
     "panel": "#08141b", "panel2": "#0d1d26", "line": "#2f6f86", "cyan": "#8ff0ff", "cyan_dim": "#4fa8bd",
@@ -92,6 +93,7 @@ class AppMD(tq.App2):
         self.rendering = set()    # диски, кадры которых сейчас рисуются в фоне
         self.disc_frame = 0
         self.scratch_until = -1
+        self.disc_switch_at = time.time() + DISC_EVERY_SEC
 
         self.load()
         self.data["md_disc"] = self.data.get("md_disc", 0) % len(DISCS)
@@ -164,14 +166,16 @@ class AppMD(tq.App2):
         self.show_toast(DISC_TITLES[self.current_disc()].upper(), 30)
 
     def scratch(self):
-        """Клик по диску — «скретч» назад и смена диска."""
+        """Клик по диску — «скретч» назад и смена диска (отсчёт 20 секунд начинается заново)."""
         self.scratch_until = self.f + 10
         self.next_disc()
+        self.disc_switch_at = time.time() + DISC_EVERY_SEC
 
     def start(self):
         super().start()
         if self.data["running"]:
             self.next_disc()   # на каждом старте — следующий диск коллекции
+            self.disc_switch_at = time.time() + DISC_EVERY_SEC
 
     # ── статичный слой ────────────────────────────────────────────────────
     def draw_static(self):
@@ -255,6 +259,9 @@ class AppMD(tq.App2):
         self.last_lv = lv
 
         # диск: кадры подгружаются понемногу; крутится, пока идёт работа
+        if running and time.time() >= self.disc_switch_at:   # смена диска каждые 20 секунд работы
+            self.next_disc()
+            self.disc_switch_at = time.time() + DISC_EVERY_SEC
         self.load_frames_step()
         frames = self.frames.get(self.current_disc()) or []
         if frames:
