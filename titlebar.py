@@ -151,7 +151,7 @@ class Win2000Style(Style):
     button_w = 18
     picker = {"title": "SKINS.EXE", "bg": "#c0c0c8", "hover": "#1a2a9a", "hover_line": "#1a2a9a", "text": "#000000",
               "sub": "#404048", "hover_text": "#ffffff", "hover_sub": "#dfe6ff", "check": "#1a2a9a",
-              "border": "#808088", "font": "sans"}
+              "border": "#808088", "font": "sans", "danger": "#c0203a"}
 
     def background(self, w, title):
         b = self.bar

@@ -16,6 +16,7 @@ from tkinter import font as tkfont
 import pixel_tracker as pt
 import task_quest_2000 as tq
 from pixel_tracker import HEART, RAIN_CHARS, RAIN_STEP, RAIN_TRAIL, SPARKLE, fmt_hms, mix
+from kanban import done_prefix
 from task_quest_2000 import FONT
 
 W, H = 480, 800
@@ -102,6 +103,7 @@ class AppTerminal(tq.App2):
         self.build_entry()
 
         self.cv.bind("<Button-1>", self.on_click)
+        self.kb_init()   # режим «Канбан» вместо вывода dir
         self.cv.bind("<MouseWheel>", self.on_wheel)
         self.cv.bind("<Button-4>", lambda e: self.scroll_by(-1))
         self.cv.bind("<Button-5>", lambda e: self.scroll_by(1))
@@ -268,7 +270,12 @@ class AppTerminal(tq.App2):
         self.gtext(84, 447, PROMPT, G["bright"], 12)
         self.term_button("add", 418, 434, 470, 460, "ADD", lambda: (self.press("add"), self.add_task()), 11)
 
-        self.draw_list(running, f)
+        self.gtext(84, 482, f"> dir /quests · {len(self.data['tasks'])} шт.", G["bright"], 12)
+        self.draw_view_tabs()
+        if self.kb_on():
+            self.draw_kanban(running, f)
+        else:
+            self.draw_list(running, f)
 
         # подвал
         self.gtext(84, 778, "> TAKE BACK YOUR TIME" + ("_" if (f // 6) % 2 else ""), G["dim"], 11)
@@ -411,10 +418,21 @@ class AppTerminal(tq.App2):
         self.cv.create_image(x1, y1, image=img, anchor="nw", tags=self.layer)
         self.hits.append((EYE_CX - EYE_HW, EYE_CY - EYE_HH, EYE_CX + EYE_HW, EYE_CY + EYE_HH, self.poke_eye))
 
+    # ── режим «Канбан» (общая логика — kanban.py) ─────────────────────────
+    KB_AREA = (84, 496, 470, 748)
+    KB_TABS = (470, 473, 491, 84)
+    KB_SKIN = "term"
+
+    def kb_theme(self):
+        return {"cols": {"todo": G["mid"], "doing": G["bright"], "done": G["hot"]}, "col_bg": G["bg"], "tint": 0.86,
+                "head_text": G["bg"], "card_bg": G["bg"], "card_line": G["dim"], "text": G["bright"], "dim": G["mid"],
+                "run": G["hot"], "mark_off": G["dim"],
+                "tab_on_bg": G["bright"], "tab_on_line": G["bright"], "tab_on_text": G["bg"],
+                "tab_off_bg": G["bg"], "tab_off_line": G["dim"], "tab_off_text": G["mid"],
+                "font": self.font, "tab_labels": ("[список]", "[канбан]")}
+
     def draw_list(self, running, f):
         tasks = self.data["tasks"]
-        self.gtext(84, 482, "> dir /quests", G["bright"], 12)
-        self.gtext(470, 482, f"{len(tasks)} шт.", G["dim"], 11, anchor="e")
         if not tasks:
             self.gtext(84, 520, "  пусто. введи название квеста выше_", G["dim"], 12)
         for idx in range(self.scroll, min(len(tasks), self.scroll + self.ROWS)):
@@ -426,6 +444,7 @@ class AppTerminal(tq.App2):
                 self.rect(84, y, 470, y + 26, G["mid"])
             ink = G["bg"] if is_sel else G["bright"]
             name = t["name"] if len(t["name"]) <= 24 else t["name"][:23] + "…"
+            name = done_prefix(self, t) + name
             leader = " " + "." * max(2, 24 - len(name))
             self.cv.create_text(90, y + 13, text=f"{idx + 1:02d}", fill=G["bg"] if is_sel else G["dim"],
                                 font=self.font(12), anchor="w", tags=self.layer)

@@ -16,6 +16,7 @@ import tkinter as tk
 from tkinter import font as tkfont
 
 import pixel_tracker as pt
+from kanban import KanbanMixin, done_prefix
 from pixel_tracker import CLOUD, HEART, LEVEL_SEC, STAR, fmt_hms, mix
 
 W, H = 480, 820
@@ -314,7 +315,7 @@ def icon_grid_2000():
     return g
 
 
-class App2(pt.App):
+class App2(KanbanMixin, pt.App):
     ROWS = 4
     ROW_H = 32
     LIST_TOP = 580
@@ -355,6 +356,7 @@ class App2(pt.App):
         self.build_entry()
 
         self.cv.bind("<Button-1>", self.on_click)
+        self.kb_init()   # режим «Канбан» в журнале квестов
         self.cv.bind("<MouseWheel>", self.on_wheel)
         self.cv.bind("<Button-4>", lambda e: self.scroll_by(-1))
         self.cv.bind("<Button-5>", lambda e: self.scroll_by(1))
@@ -716,7 +718,6 @@ class App2(pt.App):
         # журнал квестов
         self.neon(*PANELS[4])
         self.ptext("QUEST LOG", 26, 559, 2, N["pink"], shadow=N["ink"])
-        self.ptext("TIME", 428, 559, 2, N["pink"], anchor="e", shadow=N["ink"])
 
         # инвентарь
         self.neon(*PANELS[5])
@@ -785,7 +786,11 @@ class App2(pt.App):
         self.win_button("add", 400, 506, 468, 538, "ADD", N["black"],
                         lambda: (self.press("add"), self.add_task()), 2)
 
-        self.draw_list(running, f)
+        self.draw_view_tabs()
+        if self.kb_on():
+            self.draw_kanban(running, f)
+        else:
+            self.draw_list(running, f)
         self.draw_items()
         self.draw_level(running, f, today)
         self.draw_popups(running, f)
@@ -947,6 +952,19 @@ class App2(pt.App):
                 self.particles.append({"kind": "z", "x": gx + 30, "y": gb - 60, "vx": 0, "vy": -0.9, "life": 34})
         self.hits.append((gx - 28, gb - 58, gx + 28, gb, self.scare_ghost))
 
+    # ── режим «Канбан» (общая логика — kanban.py) ─────────────────────────
+    KB_AREA = (18, 574, 462, 712)   # журнал квестов
+    KB_TABS = (456, 553, 570, 84)
+    KB_SKIN = "2000"
+
+    def kb_theme(self):
+        return {"cols": {"todo": N["violet"], "doing": N["pink"], "done": N["green"]}, "col_bg": N["panel"],
+                "tint": 0.82, "head_text": N["ink"], "card_bg": N["row"], "card_line": N["sel"], "text": N["white"],
+                "dim": N["yellow"], "run": N["green"], "mark_off": N["sel"],
+                "tab_on_bg": N["sel"], "tab_on_line": N["cyan"], "tab_on_text": N["cyan"],
+                "tab_off_bg": N["row"], "tab_off_line": N["sel"], "tab_off_text": N["violet"],
+                "font": self.font, "tab_labels": ("☰ Список", "▦ Канбан")}
+
     def draw_list(self, running, f):
         tasks = self.data["tasks"]
         if not tasks:
@@ -960,6 +978,7 @@ class App2(pt.App):
             if is_sel:
                 self.rect(22, y, 26, y + 28, N["pink"] if is_run else N["cyan"])
             name = t["name"] if len(t["name"]) <= 27 else t["name"][:26] + "…"
+            name = done_prefix(self, t) + name
             marker = ("▶ " if (f // 5) % 2 else "▷ ") if is_run else ""
             self.text(34, y + 14, marker + name, N["white"], 12, anchor="w", shadow=N["ink"])
             self.text(426, y + 14, fmt_hms(self.task_total(t["id"])),

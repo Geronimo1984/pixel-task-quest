@@ -28,6 +28,7 @@ import disc_render
 import mac_disc
 import pixel_tracker as pt
 import task_quest_2000 as tq
+from kanban import done_prefix
 from pixel_tracker import fmt_hms
 
 W, H = 480, 770
@@ -122,6 +123,7 @@ class AppMD(tq.App2):
         self.build_entry()
 
         self.cv.bind("<Button-1>", self.on_click)
+        self.kb_init()   # режим «Канбан» вместо трек-листа
         self.cv.bind("<Motion>", self.on_motion)
         self.cv.bind("<Leave>", lambda e: setattr(self, "hover", None))
         self.cv.bind("<MouseWheel>", self.on_wheel)
@@ -356,7 +358,6 @@ class AppMD(tq.App2):
         x1, y1, x2, y2 = 12, LIST_TOP - 22, 468, LIST_TOP + ROWS * ROW_H + 4
         cv.create_rectangle(x1, y1, x2, y2, outline=C["line"], tags="static")
         cv.create_text(20, y1 + 11, text="TRACK LIST", fill=C["cyan"], font=self.sans(10), anchor="w", tags="static")
-        cv.create_text(460, y1 + 11, text="TIME", fill=C["cyan"], font=self.sans(10), anchor="e", tags="static")
         self.layer = "dyn"
 
     def build_entry(self):
@@ -454,7 +455,12 @@ class AppMD(tq.App2):
         rows = tuple((t["id"], t["name"], int(self.task_total(t["id"])), t["id"] == self.data["selected"],
                       bool(running and running["task_id"] == t["id"]))
                      for t in tasks[self.scroll:self.scroll + ROWS])
-        self.section("list", (self.scroll, rows, (f // 8) % 2 if running else 0), lambda: self.draw_list(running, f))
+        if self.kb_on():   # канбан перерисовывается, только когда что-то на нём меняется
+            self.section("list", ("kb", self.kb_state(running, f)),
+                         lambda: (self.draw_view_tabs(), self.draw_kanban(running, f)))
+        else:
+            self.section("list", (self.scroll, rows, (f // 8) % 2 if running else 0),
+                         lambda: (self.draw_view_tabs(), self.draw_list(running, f)))
 
         status_line = f"TODAY {fmt_hms(today)}  ·  LV {lv:02d}  ·  DISC: {DISC_TITLES[self.current_disc()].upper()}"
         self.section("status", status_line, lambda: self.cv.create_text(
@@ -547,6 +553,19 @@ class AppMD(tq.App2):
                                fill="#0a5a70" if on else C["ink"], font=self.sans(11), tags=self.layer)
             self.hits.append((x1, y1, x2, y2, acts[name]))
 
+    # ── режим «Канбан» (общая логика — kanban.py) ─────────────────────────
+    KB_AREA = (16, 572, 464, 722)
+    KB_TABS = (464, 550, 568, 80)
+    KB_SKIN = "md"
+
+    def kb_theme(self):
+        return {"cols": {"todo": C["cyan_dim"], "doing": C["run"], "done": "#7de8a8"}, "col_bg": C["panel"],
+                "tint": 0.84, "head_text": C["ink"], "card_bg": C["panel2"], "card_line": C["line"], "text": C["text"],
+                "dim": C["cyan_dim"], "run": C["run"], "mark_off": C["line"],
+                "tab_on_bg": C["cyan"], "tab_on_line": C["cyan"], "tab_on_text": C["ink"],
+                "tab_off_bg": C["panel"], "tab_off_line": C["line"], "tab_off_text": C["cyan_dim"],
+                "font": self.sans, "tab_labels": ("☰ Список", "▦ Канбан")}
+
     def draw_list(self, running, f):
         cv = self.cv
         tasks = self.data["tasks"]
@@ -565,6 +584,7 @@ class AppMD(tq.App2):
             cv.create_text(22, y + ROW_H / 2, text=f"{idx + 1:02d}", fill=dim, font=self.font(11), anchor="w",
                            tags=self.layer)
             name = t["name"] if len(t["name"]) <= 34 else t["name"][:33] + "…"
+            name = done_prefix(self, t) + name
             mark = ("▶ " if (f // 8) % 2 else "▷ ") if is_run else ""
             cv.create_text(52, y + ROW_H / 2, text=mark + name, fill=ink, font=self.sans(12), anchor="w",
                            tags=self.layer)

@@ -100,7 +100,7 @@ class TaskDetails:
             cv.create_rectangle(x1, y1, x2, y2, fill=p["hover"] if hov else p["bg"],
                                 outline=p["hover_line"] if (hov or default) else p["border"],
                                 width=2 if default else 1, tags="ctl")
-            ink = "#ff6f8f" if key == "delete" and not hov else (p["hover_text"] if hov else p["text"])
+            ink = p.get("danger", "#ff6f8f") if key == "delete" and not hov else (p["hover_text"] if hov else p["text"])
             cv.create_text((x1 + x2) / 2, (y1 + y2) / 2, text=label, fill=ink, font=self.font(12), tags="ctl")
 
     def target(self, x, y):
@@ -154,3 +154,5 @@ class TaskDetails:
             self.frame.destroy()
         if getattr(app, "details", None) is self:
             app.details = None
+            if hasattr(app, "details_closed"):
+                app.details_closed()
