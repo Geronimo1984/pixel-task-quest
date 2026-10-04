@@ -498,26 +498,31 @@ class App:
         self.save()
 
     def clear_tasks(self):
+        """Кнопка «Очистить»: сбрасывает время у всех квестов, сами квесты остаются (с резервной копией)."""
         self.press("clear")
         n = len(self.data["tasks"])
         if not n:
-            self.show_toast("Список и так пуст", 20)
+            self.show_toast("Список пуст — сбрасывать нечего", 20)
+            return
+        if not self.data["sessions"] and not self.data["running"]:
+            self.show_toast("Время и так на нуле", 20)
             return
         if not messagebox.askyesno(
-                "Очистить список",
-                f"Удалить все квесты ({n}) вместе с историей времени?\n\n"
-                "Перед очисткой я сохраню резервную копию рядом с программой."):
+                "Сбросить время",
+                f"Обнулить время у всех квестов ({n})?\n\n"
+                "Сами квесты останутся в списке. Перед сбросом я сохраню резервную копию рядом с программой."):
             return
         backup = os.path.join(os.path.dirname(DATA_FILE),
                               f"tracker_backup_{datetime.now():%Y-%m-%d_%H-%M-%S}.json")
         with open(backup, "w", encoding="utf-8") as fh:
             json.dump(self.data, fh, ensure_ascii=False, indent=1)
-        self.data.update(tasks=[], sessions=[], running=None, selected=None)
+        self.data["sessions"] = []
+        if self.data["running"]:   # идущий таймер не останавливаем — он продолжает с нуля
+            self.data["running"]["start"] = time.time()
         self.recompute()
-        self.scroll = 0
         self.save()
         self.burst("sparkle", 240, 140, 16)
-        self.show_toast("Список очищен ✓ копия сохранена", 40)
+        self.show_toast("Время сброшено ✓ копия сохранена", 40)
 
     def export_csv(self):
         self.press("csv")
@@ -915,7 +920,7 @@ class App:
         self.text(26, 492, "КВЕСТЫ", C["pink"], 12, anchor="w")
         self.text(410, 492, "ВРЕМЯ", C["pink"], 12, anchor="e")
         if self.data["tasks"]:
-            self.button("clear", 112, 481, 222, 503, "ОЧИСТИТЬ", C["red"], self.clear_tasks, 10)
+            self.button("clear", 112, 481, 222, 503, "СБРОС", C["red"], self.clear_tasks, 10)
         tasks = self.data["tasks"]
         if not tasks:
             self.text(W / 2, self.LIST_TOP + 60, "пока пусто… добавь квест выше ↑", C["dim"], 12)

@@ -61,8 +61,8 @@ C = {
     "sel": "#8ff0ff", "run": "#ffd166",
 }
 BUTTONS = [   # имя, подпись, x1, x2 — серебристые кнопки как металлический ярлык
-    ("main", "▶ START", 12, 150), ("add", "+ ДОБАВИТЬ", 156, 262), ("del", "− УДАЛИТЬ", 268, 362),
-    ("csv", "CSV", 368, 400), ("top", "TOP", 404, 436), ("skin", "SKIN", 440, 470),
+    ("main", "▶ START", 12, 120), ("add", "+ ДОБАВИТЬ", 124, 210), ("del", "− УДАЛИТЬ", 214, 292),
+    ("clear", "СБРОС", 296, 350), ("csv", "CSV", 354, 386), ("top", "TOP", 390, 432), ("skin", "SKIN", 436, 470),
 ]
 BTN_Y = (PANEL_Y + 10, PANEL_Y + 40)
 LIST_TOP, ROW_H, ROWS = PANEL_Y + 104, 26, 6
@@ -520,7 +520,7 @@ class AppMD(tq.App2):
         cv = self.cv
         y1, y2 = BTN_Y
         acts = {"main": self.toggle, "add": lambda: (self.press("add"), self.add_task()), "del": self.delete_selected,
-                "csv": self.export_csv, "top": self.toggle_top, "skin": self.switch_skin}
+                "csv": self.export_csv, "top": self.toggle_top, "skin": self.switch_skin, "clear": self.clear_tasks}
         for name, label, x1, x2 in BUTTONS:
             if name == "main":
                 label = "■ STOP" if running else "▶ START"
