@@ -62,6 +62,10 @@ def mac_hide_app(root):
 
 # ── стили панелей ──────────────────────────────────────────────────────────
 class Style:
+    # окно выбора скина: заголовок, фон, строка под мышью, текст, подпись, галочка, шрифт
+    picker = {"title": "SKINS", "bg": "#16162e", "hover": "#2a2b5a", "hover_line": "#6f74d8", "text": "#ffffff",
+              "sub": "#b4b7e6", "hover_text": "#ffffff", "hover_sub": "#b4b7e6", "check": "#7dffb0",
+              "border": "#6f74d8", "font": "sans"}
     height = 28
     bg = "#000000"
     buttons_left = True     # кнопки слева, как у macOS, или справа, как у Windows/DOS
@@ -81,6 +85,9 @@ class MoonStyle(Style):
     """Индиго с розовой рамкой, пиксельные звёздочки и круглые кнопки-«конфеты»."""
     height = 28
     bg = "#2f2180"
+    picker = {"title": "SKINS", "bg": "#221f62", "hover": "#3a2f8f", "hover_line": "#ff7fcf", "text": "#ffffff",
+              "sub": "#c9bfff", "hover_text": "#ffffff", "hover_sub": "#ffd6f0", "check": "#3fe8ac",
+              "border": "#ff7fcf", "font": "sans"}
 
     def background(self, w, title):
         b = self.bar
@@ -92,6 +99,9 @@ class MoonStyle(Style):
             b.rect(x, y, x + 2, y + 2, "#ffd23a")
             b.rect(x - 2, y, x, y + 2, "#ffffff")
         cx = w / 2
+        if title:
+            b.ptext(title, cx, 7, 2, "#ff62b4", anchor="center", shadow="#12123a")
+            return
         b.ptext("TASK QUEST", cx - 6, 7, 2, "#ff62b4", anchor="e", shadow="#12123a")
         b.heart(cx + 4, 8, "#ff2f8c")
         b.ptext("MOON", cx + 22, 7, 2, "#b296ff", shadow="#12123a")
@@ -116,6 +126,9 @@ class Win2000Style(Style):
     bg = "#1a2a9a"
     buttons_left = False
     button_w = 18
+    picker = {"title": "SKINS.EXE", "bg": "#c0c0c8", "hover": "#1a2a9a", "hover_line": "#1a2a9a", "text": "#000000",
+              "sub": "#404048", "hover_text": "#ffffff", "hover_sub": "#dfe6ff", "check": "#1a2a9a",
+              "border": "#808088", "font": "sans"}
 
     def background(self, w, title):
         b = self.bar
@@ -124,7 +137,7 @@ class Win2000Style(Style):
             b.rect(w * i / bands, 0, w * (i + 1) / bands + 1, self.height,
                    mix(tq.N["title1"], tq.N["title2"], i / (bands - 1)))
         b.sprite(tq.GHOST, 14, 3, 1.25, None, pal=tq.P2)
-        b.ptext("TASK QUEST 2000", 36, 7, 2, "#ffffff", shadow="#0b0820")
+        b.ptext(title or "TASK QUEST 2000", 36, 7, 2, "#ffffff", shadow="#0b0820")
 
     def button(self, name, x1, y1, x2, y2, hover, down):
         b = self.bar
@@ -148,6 +161,9 @@ class TerminalStyle(Style):
     bg = "#000000"
     buttons_left = False
     button_w = 34
+    picker = {"title": "skins.exe", "bg": "#000000", "hover": "#39ff6a", "hover_line": "#39ff6a", "text": "#39ff6a",
+              "sub": "#1fae48", "hover_text": "#000000", "hover_sub": "#03120a", "check": "#c4ffd2",
+              "border": "#1fae48", "font": "mono"}
 
     def background(self, w, title):
         b = self.bar
@@ -155,7 +171,7 @@ class TerminalStyle(Style):
         for y in range(1, self.height, 3):
             b.rect(0, y, w, y + 1, "#03120a")
         b.rect(0, self.height - 1, w, self.height, "#11702f")
-        b.text(10, self.height / 2, "C:\\QUEST> task_quest.exe", "#39ff6a", 11, anchor="w")
+        b.text(10, self.height / 2, "C:\\QUEST> " + (title or "task_quest.exe"), "#39ff6a", 11, anchor="w")
 
     def button(self, name, x1, y1, x2, y2, hover, down):
         b = self.bar
@@ -171,6 +187,9 @@ class MiniDiscStyle(Style):
     """Брашированный металл, как ярлык картриджа; кнопки — круглые индикаторы с голубой подсветкой."""
     height = 28
     bg = "#9aa1a7"
+    picker = {"title": "SKIN SELECT", "bg": "#08141b", "hover": "#8ff0ff", "hover_line": "#8ff0ff", "text": "#e6fbff",
+              "sub": "#4fa8bd", "hover_text": "#0b1014", "hover_sub": "#08303c", "check": "#8ff0ff",
+              "border": "#4fa8bd", "font": "sans"}
 
     def background(self, w, title):
         b = self.bar
@@ -178,8 +197,8 @@ class MiniDiscStyle(Style):
             b.rect(0, i, w, i + 1, mix("#e3e6e9", "#9aa1a7", i / (self.height - 1)))
         b.rect(0, self.height - 1, w, self.height, "#3a4045")
         b.rect(0, self.height - 2, w, self.height - 1, "#4fa8bd")
-        b.text(w / 2, self.height / 2, "T A S K   Q U E S T   ·   M I N I D I S C", "#0b1014", 10,
-               font="sans", anchor="center")
+        label = " ".join(title or "TASK QUEST · MINIDISC").replace("   ", "  ").replace(" ·", "  ·")
+        b.text(w / 2, self.height / 2, label, "#0b1014", 10, font="sans", anchor="center")
 
     def button(self, name, x1, y1, x2, y2, hover, down):
         b = self.bar
@@ -199,10 +218,12 @@ class TitleBar:
     """Холст-заголовок над холстом скина; умеет перекрашиваться под новый скин."""
     BUTTONS = ("close", "min")
 
-    def __init__(self, root, on_close):
+    def __init__(self, root, on_close, parent=None, buttons=("close", "min"), draggable=True):
         self.root = root
         self.on_close = on_close
-        self.cv = tk.Canvas(root, height=28, highlightthickness=0, bd=0)
+        self.BUTTONS = buttons
+        self.draggable = draggable
+        self.cv = tk.Canvas(parent or root, height=28, highlightthickness=0, bd=0)
         self.cv.pack(side="top", fill="x")
         self.tag = "bg"
         self.style = None
@@ -251,7 +272,7 @@ class TitleBar:
                     scale_x=0.75)
 
     # раскладка
-    def apply(self, skin, width, title):
+    def apply(self, skin, width, title=None):
         self.style = STYLES.get(skin, MoonStyle)(self)
         st = self.style
         self.width = width
@@ -297,7 +318,7 @@ class TitleBar:
         name = self.button_at(e.x, e.y)
         if name:
             self.set_state(name, name)
-        else:
+        elif self.draggable:
             self.drag = (e.x_root - self.root.winfo_x(), e.y_root - self.root.winfo_y())
 
     def on_drag(self, e):

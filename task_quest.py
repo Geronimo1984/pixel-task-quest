@@ -76,58 +76,67 @@ def skin_icon(name):
 
 
 class SkinPicker:
-    """Окошко со списком скинов: мини-иконка, название и описание в каждой строке."""
+    """Выбор скина — панель поверх окна (не отдельное окно: открывается мгновенно и ровно по центру).
+
+    Сверху свой бар в стиле текущего скина, ниже список: мини-иконка, название и описание.
+    """
     ROW = 58
+    WIDTH = 380
 
     def __init__(self, shell):
         self.shell = shell
-        root = shell.root
-        self.top = top = tk.Toplevel(root)
-        top.title("Выбор скина")
-        top.resizable(False, False)
-        top.transient(root)
-        top.configure(bg="#16162e")
-        width, height = 370, self.ROW * len(SKINS) + 52
-        self.cv = tk.Canvas(top, width=width, height=height, bg="#16162e", highlightthickness=0)
-        self.cv.pack()
-        if not getattr(shell, "icons", None):   # иконки собираем один раз за запуск
-            shell.icons = {name: skin_icon(name) for name in SKINS}
-        self.icons = shell.icons
-        self.current = shell.app.data.get("skin", DEFAULT_SKIN)
+        root, app = shell.root, shell.app
+        self.current = app.data.get("skin", DEFAULT_SKIN)
         self.hover = SKIN_ORDER.index(self.current) if self.current in SKINS else 0
-        self.width = width
+        self.icons = shell.skin_icons()
+        style = titlebar.STYLES.get(self.current, titlebar.MoonStyle)
+        self.pal = style.picker
+        family = "Menlo" if self.pal["font"] == "mono" else "Helvetica Neue"
+        self.font = lambda size, bold=True: (family, size, "bold" if bold else "normal")
+
+        self.frame = tk.Frame(root, bg=self.pal["border"], bd=0, highlightthickness=0)
+        self.bar = titlebar.TitleBar(root, self.close, parent=self.frame, buttons=("close",), draggable=False)
+        self.bar.cv.pack_configure(padx=2, pady=(2, 0))
+        self.bar.apply(self.current, self.WIDTH, self.pal["title"])
+        height = self.ROW * len(SKINS) + 40
+        self.cv = tk.Canvas(self.frame, width=self.WIDTH, height=height, bg=self.pal["bg"], highlightthickness=0)
+        self.cv.pack(padx=2, pady=(0, 2))
         self.draw()
         self.cv.bind("<Motion>", self.on_motion)
         self.cv.bind("<Button-1>", self.on_click)
-        top.bind("<Up>", lambda e: self.move(-1))
-        top.bind("<Down>", lambda e: self.move(1))
-        top.bind("<Return>", lambda e: self.choose(SKIN_ORDER[self.hover]))
-        top.bind("<Escape>", lambda e: self.close())
-        top.protocol("WM_DELETE_WINDOW", self.close)
-        root.update_idletasks()
-        x = root.winfo_rootx() + (root.winfo_width() - width) // 2
-        y = root.winfo_rooty() + 120
-        top.geometry(f"+{x}+{y}")
-        top.grab_set()
-        top.focus_set()
+        for widget in (self.cv, self.bar.cv):
+            widget.bind("<Up>", lambda e: self.move(-1))
+            widget.bind("<Down>", lambda e: self.move(1))
+            widget.bind("<Return>", lambda e: self.choose(SKIN_ORDER[self.hover]))
+            widget.bind("<Escape>", lambda e: self.close())
+        # клик мимо панели закрывает её
+        app.cv.bind("<Button-1>", lambda e: self.close())
+        self.frame.place(in_=app.cv, relx=0.5, y=96, anchor="n")
+        self.frame.lift()
+        self.cv.focus_set()
 
     def draw(self):
-        cv = self.cv
+        cv, p, w = self.cv, self.pal, self.WIDTH
         cv.delete("all")
-        cv.create_text(16, 22, text="Выбери скин", fill="#ffffff", font=("Tahoma", 14, "bold"), anchor="w")
-        cv.create_text(self.width - 16, 22, text="↑ ↓ Enter", fill="#7d7fb0", font=("Tahoma", 10), anchor="e")
+        cv.create_text(16, 18, text="Выбери скин", fill=p["text"], font=self.font(13), anchor="w")
+        cv.create_text(w - 16, 18, text="↑ ↓ Enter · Esc", fill=p["sub"], font=self.font(10, False), anchor="e")
         for i, name in enumerate(SKIN_ORDER):
-            y = 44 + i * self.ROW
-            if i == self.hover:
-                cv.create_rectangle(8, y, self.width - 8, y + self.ROW - 6, fill="#2a2b5a", outline="#6f74d8")
+            y = 34 + i * self.ROW
+            on = i == self.hover
+            if on:   # подсветка строки в стиле старых меню
+                cv.create_rectangle(8, y, w - 8, y + self.ROW - 6, fill=p["hover"], outline=p["hover_line"])
+                cv.create_text(w - 40, y + 26, text="◄", fill=p["hover_text"], font=self.font(11))
             cv.create_image(18, y + (self.ROW - 6) / 2, image=self.icons[name], anchor="w")
-            cv.create_text(64, y + 17, text=SKINS[name][0], fill="#ffffff", font=("Tahoma", 13, "bold"), anchor="w")
-            cv.create_text(64, y + 36, text=SKIN_INFO[name], fill="#b4b7e6", font=("Tahoma", 10), anchor="w")
+            cv.create_text(64, y + 17, text=SKINS[name][0], fill=p["hover_text"] if on else p["text"],
+                           font=self.font(13), anchor="w")
+            cv.create_text(64, y + 36, text=SKIN_INFO[name], fill=p["hover_sub"] if on else p["sub"],
+                           font=self.font(10, False), anchor="w")
             if name == self.current:
-                cv.create_text(self.width - 22, y + 26, text="✓", fill="#7dffb0", font=("Tahoma", 16, "bold"))
+                cv.create_text(w - 20, y + 26, text="✓", fill=p["hover_text"] if on else p["check"],
+                               font=self.font(16))
 
     def row_at(self, y):
-        i = int((y - 44) // self.ROW)
+        i = int((y - 34) // self.ROW)
         return i if 0 <= i < len(SKIN_ORDER) else None
 
     def on_motion(self, e):
@@ -151,9 +160,15 @@ class SkinPicker:
             self.shell.root.after_idle(lambda: self.shell.load_skin(name))
 
     def close(self):
+        if self.shell.picker is not self:
+            return
         self.shell.picker = None
-        self.top.grab_release()
-        self.top.destroy()
+        app = self.shell.app
+        if app.cv.winfo_exists():
+            app.cv.bind("<Button-1>", app.on_click)
+        self.frame.destroy()
+
+
 SKIN_ORDER = list(SKINS)
 
 
@@ -268,15 +283,18 @@ class Shell:
         root.geometry(f"+{x}+{30}")
         root.createcommand("::tk::mac::ReopenApplication", self.show)  # клик по иконке в Dock
         root.after(150, self.show)
+        root.after(800, self.skin_icons)   # иконки для выбора скина — заранее, пока окно простаивает
 
     def load_skin(self, name, first=False):
+        if self.picker:
+            self.picker.close()
         topmost = False
         if self.app:
             topmost = self.app.topmost
             self.app.save()
             self.app.teardown()
         self.app = SKINS[name][1](self.root)
-        self.bar.apply(name, int(self.app.cv["width"]), self.root.title())
+        self.bar.apply(name, int(self.app.cv["width"]))
         self.app.on_switch = self.pick_skin
         self.app.topmost = topmost
         self.app.data["skin"] = name
@@ -290,10 +308,17 @@ class Shell:
         titlebar.mac_window_polish()
         self.root.focus_force()
 
+    def skin_icons(self):
+        if not getattr(self, "icons", None):   # иконки собираются один раз за запуск
+            self.icons = {name: skin_icon(name) for name in SKINS}
+        return self.icons
+
     def pick_skin(self):
-        """Кнопка SKIN открывает список скинов."""
+        """Кнопка SKIN открывает список скинов (повторное нажатие закрывает)."""
         if self.picker is None:
             self.picker = SkinPicker(self)
+        else:
+            self.picker.close()
 
 
 
