@@ -762,13 +762,16 @@ class AppMoon(tq.App2):
         cx, cy = KIRBY_CENTER[0], KIRBY_CENTER[1] + bob + jump
         top, left = cy - h / 2, cx - w / 2
         x1, y1, x2, y2 = PANEL_R[0] + 4, 234, PANEL_R[1] - 4, 392
-        # радужный хвост от левого края панели до звезды, волна бежит назад
+        # радужный хвост от левого края панели до звезды, волна бежит назад;
+        # в прыжке хвост изгибается вверх вслед за звездой и не отрывается от неё
         trail_top = KIRBY_CENTER[1] + bob - h / 2
         speed = 3 if lively else 1
+        span = max(1, left - x1)
         for x in range(x1, int(left) + 4, 4):
             wave = s if ((x + f * speed) // 10) % 2 else 0
+            lift = round(jump * min(1, (x - x1) / span) ** 1.6 / s) * s
             for row, col in KIRBY_TRAIL.items():
-                ty = trail_top + row * s + wave
+                ty = trail_top + row * s + wave + lift
                 self.rect(x, ty, min(x + 4, left + 4), ty + s, col)
         if f % (3 if lively else 7) == 0:  # встречные искры — ощущение скорости
             self.particles.append({"kind": "sparkle", "x": x2, "y": random.uniform(y1 + 8, y2 - 8),
