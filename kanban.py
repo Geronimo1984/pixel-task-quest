@@ -116,15 +116,17 @@ class KanbanMixin:
         if ghost:   # карточку тащат — на месте остаётся пунктирный контур
             self.cv.create_rectangle(x1, y1, x2, y2, outline=color, dash=(3, 2), tags=self.layer)
             return
-        k = 2 if is_sel else 1
-        self.rect(x1, y1, x2, y2, color if is_sel else th["card_line"])
+        k = 3 if is_run else (2 if is_sel else 1)
+        # текущая задача: толстая пульсирующая рамка цвета «идёт»
+        line = (th["run"] if (f // 4) % 2 else color) if is_run else (color if is_sel else th["card_line"])
+        self.rect(x1, y1, x2, y2, line)
         self.rect(x1 + k, y1 + k, x2 - k, y2 - k, th["card_bg"])
         self.rect(x1, y1, x1 + 3, y2, color)   # цветная кромка статуса
         name = self.fit_text(t["name"], x2 - x1 - 22, 10)
         self.kb_text(x1 + 8, y1 + 11, name, th["run"] if is_run else th["text"], 10)
         self.kb_text(x1 + 8, y1 + 26, fmt_hms(self.task_total(t["id"])), th["run"] if is_run else th["dim"], 9)
         if is_run:
-            self.kb_run_mark(x2 - 30, y1 + 26, f)
+            self.kb_run_mark(x2 - 19, y1 + 26, f)
         has_comment = bool(t.get("comment", "").strip())
         self.kb_text(x2 - 10, y1 + 26, "✎", color if has_comment else th["mark_off"], 11, anchor="center")
         tid = t["id"]
@@ -133,9 +135,13 @@ class KanbanMixin:
         self.hits.append((x2 - 18, y1 + 18, x2, y2, lambda tid=tid: self.open_details(tid)))
 
     def kb_run_mark(self, x, y, f):
-        """Отметка идущего квеста на карточке (скины переопределяют: Moon — сердечко)."""
+        """Отметка идущего квеста: яркая мигающая плашка «ИДЁТ» (Moon — крупное сердечко).
+        x — правый край плашки, y — середина строки времени."""
         th = self.kb_theme()
-        self.kb_text(x, y, "●", th["run"] if (f // 4) % 2 else th["dim"], 9, anchor="center")
+        w, h = 36, 15
+        on = (f // 4) % 2
+        self.rect(x - w, y - h / 2, x, y + h / 2, th["run"] if on else th["text"])
+        self.kb_text(x - w / 2, y, "ИДЁТ", th["card_bg"], 8, anchor="center")
 
     def fit_text(self, text, width, size):
         fonts = self.__dict__.setdefault("_kb_fonts", {})
@@ -210,6 +216,12 @@ class KanbanMixin:
                 return
 
     def tick(self):
+        r = self.data["running"]
+        if r:   # счёт времени по задаче, которая уже «Готово», не идёт — таймер останавливается сам
+            t = self.task(r["task_id"])
+            if t and t.get("status") == "done":
+                self.stop()
+                self.show_toast(f"Готово: {t['name'][:22]} — таймер остановлен", 30)
         super().tick()
         if self.kb_drag and self.kb_drag.get("active"):
             self.cv.tag_raise("kbghost")   # призрак всегда поверх свежего кадра
@@ -268,9 +280,13 @@ class KanbanMixin:
         t = self.task(tid)
         if not t:
             return
+        changed = (name, comment, status) != (t["name"], t.get("comment", ""), self.status_of(t))
         t["name"], t["comment"] = name, comment
         self.save()
-        self.set_status(tid, status)
+        if status != self.status_of(t):
+            self.set_status(tid, status)   # «Готово» — с остановкой таймера и своим оповещением
+        else:
+            self.show_toast("Изменения сохранены ✓" if changed else "Без изменений", 22)
 
     def details_closed(self):
         if hasattr(self, "overlay_changed"):

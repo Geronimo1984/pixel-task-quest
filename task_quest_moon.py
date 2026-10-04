@@ -1130,7 +1130,8 @@ class AppMoon(tq.App2):
         return self.ui(size, bold)
 
     def kb_run_mark(self, x, y, f):
-        self.sprite(HEART, x, y + 5, 1.5 + 0.3 * abs(math.sin(f * 0.3)), pal=P3)
+        # крупное пульсирующее сердечко — сразу видно, какой квест идёт
+        self.sprite(HEART, x - 12, y + 9, 2.2 + 0.5 * abs(math.sin(f * 0.3)), pal=P3)
 
     def kb_done_fx(self):
         self.star_burst(380, 640, 8, (CRANE_STAR_PAL, WARP_STAR_PAL))

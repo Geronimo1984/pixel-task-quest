@@ -1,7 +1,7 @@
 """Карточка задачи для канбана: название, статус, время и комментарий — окно поверх скина в его стиле.
 
-Открывается двойным кликом по карточке (или по значку ✎). Сохранить — кнопка или ⌘/Ctrl+Enter,
-отмена — Esc или крестик в баре. Пока карточка открыта, клики мимо неё скину не достаются.
+Открывается двойным кликом по карточке (или по значку ✎). Сохранить — Enter (или кнопка),
+новая строка в комментарии — Shift+Enter, отмена — Esc или крестик в баре. Пока карточка открыта, клики мимо неё скину не достаются.
 """
 import tkinter as tk
 
@@ -55,6 +55,8 @@ class TaskDetails:
 
         # комментарий
         cv.create_text(PAD, 164, text="Комментарий", fill=p["sub"], font=self.font(10), anchor="w")
+        cv.create_text(WIDTH - PAD, 164, text="↩ сохранить · ⇧↩ новая строка", fill=p["sub"],
+                       font=self.font(9, False), anchor="e")
         self.comment = tk.Text(cv, font=self.font(12, False), bg="#ffffff", fg="#26306e", relief="flat", wrap="word",
                                insertbackground=p["hover_line"], highlightthickness=2, padx=6, pady=4,
                                highlightbackground=p["border"], highlightcolor=p["hover_line"], undo=True)
@@ -74,7 +76,12 @@ class TaskDetails:
             w.bind("<Escape>", lambda e: self.cancel())
             w.bind("<Command-Return>", lambda e: (self.save(), "break")[1])
             w.bind("<Control-Return>", lambda e: (self.save(), "break")[1])
-        self.name.bind("<Return>", lambda e: (self.comment.focus_set(), "break")[1])
+        for w in (cv, self.bar.cv, self.name, self.comment):
+            w.bind("<Return>", lambda e: (self.save(), "break")[1])
+            w.bind("<KP_Enter>", lambda e: (self.save(), "break")[1])
+        # новая строка в комментарии — Shift+Enter (или ⌥+Enter)
+        self.comment.bind("<Shift-Return>", lambda e: (self.comment.insert("insert", "\n"), "break")[1])
+        self.comment.bind("<Option-Return>", lambda e: (self.comment.insert("insert", "\n"), "break")[1])
         cv.bind("<space>", lambda e: "break")
 
         # клики мимо карточки скину не достаются
