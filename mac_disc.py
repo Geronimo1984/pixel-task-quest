@@ -139,12 +139,13 @@ class NativeDisc:
         """k — доля полного хода (1 — оборот за period секунд, 0 — стоит, < 0 — назад)."""
         if abs(k - self.speed) < 1e-4:
             return
+        # время слоя: local = now * speed + timeOffset. Меняем скорость так, чтобы local не прыгнул;
+        # beginTime слоя не трогаем — иначе слой на мгновение «ещё не начался» и пропадает с экрана
         now = _qc.CACurrentMediaTime()
         local = _send(self.disc, b"convertTime:fromLayer:", _D, (_D, _V), now, None)
         with _Tx():
-            _send(self.disc, b"setTimeOffset:", None, (_D,), local)
-            _send(self.disc, b"setBeginTime:", None, (_D,), now)
             _send(self.disc, b"setSpeed:", None, (_F,), k)
+            _send(self.disc, b"setTimeOffset:", None, (_D,), local - now * k)
         self.speed = k
 
     def set_hidden(self, hidden):
@@ -199,8 +200,12 @@ def attach(x, y, size, disc_path, cutout_path, cut_x, cut_y, hub_path, period):
             _send(anim, b"setDuration:", None, (_D,), period)
             _send(anim, b"setRepeatCount:", None, (_F,), 1e9)
             _send(anim, b"setRemovedOnCompletion:", None, (_B,), False)
-            _send(disc, b"addAnimation:forKey:", None, (_V, _V), anim, _nsstring("spin"))
+            # анимация началась «давно» (в момент 1 по времени слоя), а время слоя стартует с большого запаса:
+            # даже долгий «скретч» назад не уведёт его раньше начала анимации
+            _send(anim, b"setBeginTime:", None, (_D,), 1.0)
             _send(disc, b"setSpeed:", None, (_F,), 0.0)
+            _send(disc, b"setTimeOffset:", None, (_D,), 100000.0)
+            _send(disc, b"addAnimation:forKey:", None, (_V, _V), anim, _nsstring("spin"))
         nd = NativeDisc(host, container, disc, hub, period, x, y, size)
         nd.set_image(disc_path)
         return nd
