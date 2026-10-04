@@ -5,7 +5,6 @@
   moon  — волшебная аркада с сердечками-блоками и мессенджер в духе Windows XP (task_quest_moon.py)
   2000  — неоновый RPG-интерфейс, окошки Windows 98 и комната с призраком (task_quest_2000.py)
   term  — зелёный фосфорный терминал с падающими символами и полутоновым глазом (task_quest_terminal.py)
-  player — плеер K-Jofol с вращающимися дисками Kirby Air Ride, Bratz и Resident Evil 4 (task_quest_player.py)
 
 Кнопка SKIN открывает список скинов с мини-иконками. Таймер, квесты и история при смене скина сохраняются,
 выбранный скин запоминается до следующего запуска.
@@ -22,18 +21,15 @@ import pixel_tracker as pt
 import task_quest_2000 as tq
 import task_quest_moon as tm
 import task_quest_terminal as tt
-import task_quest_player as tp
 from pixel_tracker import mix
 from task_quest_2000 import N
 
-SKINS = {"moon": ("Moon", tm.AppMoon), "2000": ("2000", tq.App2), "term": ("Terminal", tt.AppTerminal),
-         "player": ("Player", tp.AppPlayer)}  # порядок = порядок переключения
+SKINS = {"moon": ("Moon", tm.AppMoon), "2000": ("2000", tq.App2), "term": ("Terminal", tt.AppTerminal)}  # порядок = порядок переключения
 DEFAULT_SKIN = "moon"
 SKIN_INFO = {
     "moon": "Волшебная аркада, Кирби и мессенджер",
     "2000": "Неоновый RPG, Windows 98 и призрак",
     "term": "Зелёный фосфорный терминал",
-    "player": "Плеер K-Jofol и вращающиеся диски",
 }
 ICON = 34  # размер мини-иконки в списке скинов
 
@@ -68,10 +64,6 @@ def skin_icon(name):
             img.put("#04150a", to=(2, y, ICON - 2, y + 1))
         sprite(tq.FONT[">"], {"#": "#39ff6a"}, 6, 10, 2)
         img.put("#39ff6a", to=(18, 22, 28, 24))
-    elif name == "player":    # диск в приводе плеера
-        square("#5a6a5c", "#1c221d", "#9fb19d")
-        disc = tk.PhotoImage(file=os.path.join(pt.APP_DIR, "assets", "disc_kirby_small.png")).subsample(2)
-        img.tk.call(img, "copy", disc, "-to", 3, 3, "-compositingrule", "overlay")
     return img
 
 
