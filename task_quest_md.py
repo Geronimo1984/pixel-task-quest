@@ -482,7 +482,9 @@ class AppMD(tq.App2):
         # время идущего трека — в правом верхнем углу окошка, напротив REC / PAUSE
         cv.create_text(x2 - 8, y1 + 16, text=f"ТРЕК {track}", fill=C["run"] if running else C["label_dim"],
                        font=self.sans(10), anchor="e", tags=self.layer)
-        cv.create_text(x2 - 8, y1 + 54, text=time_text, fill=C["label"], font=self.sans(28), anchor="e",
+        cv.create_text(x2 - 8, y1 + 34, text="ВСЕГО ЗА ДЕНЬ", fill=C["label_dim"], font=self.sans(8), anchor="e",
+                       tags=self.layer)
+        cv.create_text(x2 - 8, y1 + 57, text=time_text, fill=C["label"], font=self.sans(27), anchor="e",
                        tags=self.layer)
         width = x2 - x1 - 16
         lines, size = self.fit_caption(caption, width)
