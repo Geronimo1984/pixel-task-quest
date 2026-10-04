@@ -275,6 +275,67 @@ class HeartStack:
 
 ASSETS = os.path.join(pt.APP_DIR, "assets")
 
+# Розовая планета с кольцом в окне NEXT — точная копия присланной картинки (поле 50×45, масштаб 2);
+# кольцо крутится: по нему бегут светлые и тёмные полосы
+PLANET = [
+    ".............................ddd.",
+    ".............pppppp.......dddrrrr",
+    "...........ppwwwwwwpp...dddrrrrrr",
+    ".........ppwwwwwwwqwwppddddrrrrrr",
+    "........pqwwwwwwwwsqwwwpdd..rrrr.",
+    ".......pqwwwwwwwwwwswwlwp...rrrr.",
+    "......pqwwwwwwlsswwwlwwwwp..rrrr.",
+    "......pwwwqswwlqqslllllwwp.rrrr..",
+    ".....pqwwqqswlsqqqqqqqslwwrrrr...",
+    ".....pwwwqsllsqqppppppqlwrrrr....",
+    "....pqwwwslllqqpqwwqqpqlrrrr.....",
+    "....pqwwwllwsqppwwwwqllrrrrp.....",
+    "....pqwwwllwsqppqwqqlwrrrrwp.....",
+    "....pqwwwllqwlppqqppqrrrrwwp.....",
+    "....pqwwwllsqqpppqpprrrrswwp.....",
+    "....pqwwwwllsqqpppprrrrwlwwp.....",
+    ".....pqwwwwllsqqprrrrrslwwp......",
+    ".....pqwwwwllwlsrrrrrqslwwp......",
+    "....ddpwwwwwwllrrrrlwlplwp.......",
+    "...dddpqwwwwwrrrrrlwwllwwp.......",
+    "..ddd..pqwwwrrrrrwwwlwwwp........",
+    ".ddd....prrrrrrwwwwwwwwp.........",
+    "dddr...rrrrrrwwwwwwwwpp..........",
+    "ddrrrrrrrrrppqqqwwwpp............",
+    "drrrrrrrrr...pppppp..............",
+    "rrrrrrrrr........................",
+    "rrrrrr...........................",
+]
+PLANET_STARS = [  # звёзды вокруг планеты: клетки (x, y) на поле 50×45, каждая звезда мерцает сама
+    [(2,4),(3,4),(4,4),(5,3),(5,4),(5,5),(6,0),(6,1),(6,2),(6,3),(6,4),(6,5),(6,6),(6,7),(6,8),(7,3),(7,4),(7,5),(8,4),(9,4),(10,4)],
+    [(40,34),(41,33),(41,35),(42,32),(42,34),(42,36),(43,33),(43,35),(44,34)],
+    [(2,36),(2,39),(3,37),(3,38),(4,37),(4,38),(5,36),(5,39)],
+    [(22,42),(23,40),(23,41),(23,42),(23,43),(23,44),(24,42)],
+    [(12,1),(13,0),(13,1),(13,2),(14,1)],
+    [(44,6),(45,5),(45,6),(45,7),(46,6)],
+    [(3,22),(4,21),(4,23),(5,22)],
+    [(32,1)],
+    [(40,1)],
+    [(42,1)],
+    [(44,1)],
+    [(7,15)],
+    [(47,27)],
+    [(42,30)],
+    [(30,34)],
+    [(38,34)],
+    [(46,34)],
+    [(16,37)],
+    [(42,38)],
+]
+PLANET_PAL = {"w": "#facee2", "l": "#fbadd0", "s": "#f9799f", "q": "#f46691", "p": "#eb4371",
+              "r": "#b03f4f", "d": "#97323d"}
+RING_LIGHT, RING_DARK = "#d4627c", "#74232e"
+PLANET_FIELD = (358, 74)        # левый верхний угол поля 50×45 в окне NEXT
+PLANET_OFFSET = (9, 6)          # где на поле стоит планета с кольцом
+PLANET_FRAMES = 16              # кадров на оборот полос
+RING_AXES = ((15.5, 13), (0.79, -0.61), 19.6, 4.0)  # центр кольца, направление большой оси, полуоси
+
+
 # Hello Kitty — портрет 100×120 в левой нижней панели (точная копия кадра из картинки)
 KITTY_AT = (22, 272)
 KITTY_EYES = [(36, 56), (38, 56), (35, 57), (36, 57), (38, 57), (39, 57), (36, 58), (37, 58), (38, 58), (39, 58),
@@ -379,6 +440,8 @@ class AppMoon(tq.App2):
                 parts.append((part, x1, y1))
             self.claw_parts = parts
         self.kitty = self.load_asset("kitty.png")
+        self.planet_frames = self.build_planet_frames()
+        self.planet_k = 0
         self.cinna_img = self.load_asset("cinna.png")
         self.sailor = self.load_asset("sailor.png")
         if self.sailor:
@@ -625,7 +688,7 @@ class AppMoon(tq.App2):
             self.msprite(COMPACT, cx, 356 + bob, 3)
 
         rx = sum(PANEL_R) / 2
-        self.draw_next(rx)
+        self.draw_planet(running, f)
         if running:
             if (f // 6) % 2:
                 self.ptext("PLAY", rx, 200, 3, T["play"], anchor="center", shadow=M["ink"])
@@ -852,15 +915,46 @@ class AppMoon(tq.App2):
                                    "y": bottom - random.uniform(20, h), "vx": 0, "vy": -0.4, "life": 12,
                                    "gravity": False})
 
-    def draw_next(self, rx):
-        for n, kind in enumerate(self.stack.queue[:2]):
-            cells = ROTS[kind][0]
-            s = 14 if n == 0 else 10
-            w = (max(c for c, _ in cells) + 1) * s
-            h = (max(r for _, r in cells) + 1) * s
-            top = 74 if n == 0 else 128
-            for c, r in cells:
-                self.block(rx - w / 2 + c * s, top + (30 - h) / 2 + r * s, PIECE_COLORS[kind], s)
+    @staticmethod
+    def build_planet_frames():
+        """Кадры планеты: кольцо то же, но светлые и тёмные полосы на нём сдвигаются по кругу."""
+        (cx, cy), (ux, uy), a, b = RING_AXES
+        frames = []
+        for k in range(PLANET_FRAMES):
+            phase = k / PLANET_FRAMES * math.tau
+            img = tk.PhotoImage(width=len(PLANET[0]) * 2, height=len(PLANET) * 2)
+            for y, row in enumerate(PLANET):
+                for x, ch in enumerate(row):
+                    if ch == ".":
+                        continue
+                    col = PLANET_PAL[ch]
+                    if ch in "rd":
+                        dx, dy = x - cx, y - cy
+                        t = math.atan2((dx * -uy + dy * ux) / b, (dx * ux + dy * uy) / a)
+                        band = math.sin(3 * t - phase)
+                        if band > 0.55:
+                            col = PLANET_PAL["r"] if ch == "d" else RING_LIGHT
+                        elif band < -0.55:
+                            col = PLANET_PAL["d"] if ch == "r" else RING_DARK
+                    img.put(col, to=(x * 2, y * 2, x * 2 + 2, y * 2 + 2))
+            frames.append(img)
+        return frames
+
+    def draw_planet(self, running, f):
+        """Окно NEXT: планета, кольцо вращается (быстрее во время работы), звёзды вокруг мерцают."""
+        fx, fy = PLANET_FIELD
+        if running or f % 2 == 0:
+            self.planet_k = (self.planet_k + 1) % PLANET_FRAMES
+        self.cv.create_image(fx + PLANET_OFFSET[0] * 2, fy + PLANET_OFFSET[1] * 2,
+                             image=self.planet_frames[self.planet_k], anchor="nw", tags=self.layer)
+        for i, star in enumerate(PLANET_STARS):
+            k = (f // 3 + i * 7) % 20
+            if k >= 16:
+                continue                      # погасла
+            if k >= 13 and len(star) > 4:     # большая звезда «сжимается» до центра
+                star = star[len(star) // 2:len(star) // 2 + 1]
+            for x, y in star:
+                self.rect(fx + x * 2, fy + y * 2, fx + x * 2 + 2, fy + y * 2 + 2, PLANET_PAL["w"])
 
     def draw_well(self, running, f):
         st = self.stack
