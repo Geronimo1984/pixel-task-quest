@@ -8,10 +8,10 @@
 Нажимаешь «СТАРТ», работаешь, а пиксельные друзья тебя подбадривают.</p>
 
 <p align="center">
-  <img src="docs/screenshot_moon.svg" width="260" alt="Скин Moon">
-  <img src="docs/screenshot_2000.svg" width="260" alt="Скин 2000">
-  <img src="docs/screenshot_terminal.svg" width="260" alt="Скин Terminal">
-  <img src="docs/screenshot_md.png" width="260" alt="Скин MiniDisc">
+  <img src="docs/screenshot_moon.png" width="200" alt="Скин Moon">
+  <img src="docs/screenshot_2000.png" width="200" alt="Скин 2000">
+  <img src="docs/screenshot_terminal.png" width="200" alt="Скин Terminal">
+  <img src="docs/screenshot_md.png" width="200" alt="Скин MiniDisc">
 </p>
 
 ## Возможности
