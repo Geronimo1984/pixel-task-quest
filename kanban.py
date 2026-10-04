@@ -135,13 +135,10 @@ class KanbanMixin:
         self.hits.append((x2 - 18, y1 + 18, x2, y2, lambda tid=tid: self.open_details(tid)))
 
     def kb_run_mark(self, x, y, f):
-        """Отметка идущего квеста: яркая мигающая плашка «ИДЁТ» (Moon — крупное сердечко).
-        x — правый край плашки, y — середина строки времени."""
+        """Отметка идущего квеста: крупная мигающая точка (Moon — крупное сердечко).
+        x — правый край отметки, y — середина строки времени."""
         th = self.kb_theme()
-        w, h = 36, 15
-        on = (f // 4) % 2
-        self.rect(x - w, y - h / 2, x, y + h / 2, th["run"] if on else th["text"])
-        self.kb_text(x - w / 2, y, "ИДЁТ", th["card_bg"], 8, anchor="center")
+        self.kb_text(x - 9, y - 1, "●", th["run"] if (f // 4) % 2 else th["dim"], 17, anchor="center")
 
     def fit_text(self, text, width, size):
         fonts = self.__dict__.setdefault("_kb_fonts", {})
