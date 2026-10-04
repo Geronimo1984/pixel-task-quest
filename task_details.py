@@ -135,7 +135,7 @@ class TaskDetails:
             cv.create_rectangle(x1, y1, x2, y2, fill=p["hover"] if hov else p["bg"],
                                 outline=p["hover_line"] if hov else p["border"], tags="mic")
             cv.create_oval(x1 + 7, y1 + 6, x1 + 15, y1 + 14, fill=rec, outline="", tags="mic")
-            cv.create_text(x1 + 21, (y1 + y2) / 2, text="Голосом ⌘D", fill=p["hover_text"] if hov else p["text"],
+            cv.create_text(x1 + 21, (y1 + y2) / 2, text="Голосом", fill=p["hover_text"] if hov else p["text"],
                            font=self.font(9), anchor="w", tags="mic")
 
     def toggle_mic(self):
