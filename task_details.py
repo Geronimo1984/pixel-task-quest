@@ -5,6 +5,7 @@
 """
 import tkinter as tk
 
+import dictation
 import titlebar
 from pixel_tracker import fmt_hms
 
@@ -55,8 +56,11 @@ class TaskDetails:
 
         # комментарий
         cv.create_text(PAD, 164, text="Комментарий", fill=p["sub"], font=self.font(10), anchor="w")
-        cv.create_text(WIDTH - PAD, 164, text="↩ сохранить · ⇧↩ новая строка", fill=p["sub"],
+        cv.create_text(WIDTH - PAD, 164, text="↩ сохранить · ⇧↩ строка", fill=p["sub"],
                        font=self.font(9, False), anchor="e")
+        # голосовой ввод комментария (диктовка macOS) — кнопка рядом с подписью, ⌘D
+        self.listening = False
+        self.mic = (PAD + 92, 154, PAD + 196, 174) if dictation.AVAILABLE else None
         self.comment = tk.Text(cv, font=self.font(12, False), bg="#ffffff", fg="#26306e", relief="flat", wrap="word",
                                insertbackground=p["hover_line"], highlightthickness=2, padx=6, pady=4,
                                highlightbackground=p["border"], highlightcolor=p["hover_line"], undo=True)
@@ -83,11 +87,14 @@ class TaskDetails:
         self.comment.bind("<Shift-Return>", lambda e: (self.comment.insert("insert", "\n"), "break")[1])
         self.comment.bind("<Option-Return>", lambda e: (self.comment.insert("insert", "\n"), "break")[1])
         cv.bind("<space>", lambda e: "break")
+        for w in (cv, self.bar.cv, self.name, self.comment):
+            w.bind("<Command-d>", lambda e: (self.toggle_mic(), "break")[1])
 
         # клики мимо карточки скину не достаются
         app.cv.bind("<Button-1>", lambda e: "break")
         self.frame.place(in_=app.cv, relx=0.5, rely=0.5, anchor="center")
         self.frame.lift()
+        self.draw_mic()
         self.comment.focus_set()
         self.comment.mark_set("insert", "end")
 
@@ -110,7 +117,51 @@ class TaskDetails:
             ink = p.get("danger", "#ff6f8f") if key == "delete" and not hov else (p["hover_text"] if hov else p["text"])
             cv.create_text((x1 + x2) / 2, (y1 + y2) / 2, text=label, fill=ink, font=self.font(12), tags="ctl")
 
+    def draw_mic(self):
+        if not self.mic:
+            return
+        cv, p = self.cv, self.pal
+        cv.delete("mic")
+        x1, y1, x2, y2 = self.mic
+        hov = self.hover == ("btn", "mic")
+        rec = "#ff3b5c"
+        if self.listening:   # идёт диктовка: красная рамка и мигающая точка
+            blink = getattr(self, "mic_blink", 0)
+            cv.create_rectangle(x1, y1, x2, y2, fill=p["bg"], outline=rec, width=2, tags="mic")
+            cv.create_oval(x1 + 7, y1 + 6, x1 + 15, y1 + 14, fill=rec if blink else p["bg"], outline=rec, tags="mic")
+            cv.create_text(x1 + 21, (y1 + y2) / 2, text="Слушаю… стоп", fill=rec, font=self.font(9), anchor="w",
+                           tags="mic")
+        else:
+            cv.create_rectangle(x1, y1, x2, y2, fill=p["hover"] if hov else p["bg"],
+                                outline=p["hover_line"] if hov else p["border"], tags="mic")
+            cv.create_oval(x1 + 7, y1 + 6, x1 + 15, y1 + 14, fill=rec, outline="", tags="mic")
+            cv.create_text(x1 + 21, (y1 + y2) / 2, text="Голосом ⌘D", fill=p["hover_text"] if hov else p["text"],
+                           font=self.font(9), anchor="w", tags="mic")
+
+    def toggle_mic(self):
+        if not self.mic:
+            return
+        if self.listening:
+            dictation.stop()
+            self.listening = False
+        else:
+            self.listening = dictation.start(self.comment)
+            if self.listening:
+                self.blink_mic()
+            else:
+                self.app.show_toast("Диктовка недоступна — включи её в настройках macOS", 40)
+        self.draw_mic()
+
+    def blink_mic(self):
+        if not self.listening or not self.frame.winfo_exists():
+            return
+        self.mic_blink = 1 - getattr(self, "mic_blink", 0)
+        self.draw_mic()
+        self.frame.after(450, self.blink_mic)
+
     def target(self, x, y):
+        if self.mic and self.mic[0] <= x <= self.mic[2] and self.mic[1] <= y <= self.mic[3]:
+            return ("btn", "mic")
         for key, x1, y1, x2, y2 in self.status_slots:
             if x1 <= x <= x2 and y1 <= y <= y2:
                 return ("st", key)
@@ -123,6 +174,7 @@ class TaskDetails:
         if t != self.hover:
             self.hover = t
             self.draw_controls()
+            self.draw_mic()
 
     def on_motion(self, e):
         self.set_hover(self.target(e.x, e.y))
@@ -135,6 +187,8 @@ class TaskDetails:
         if kind == "st":
             self.status = key
             self.draw_controls()
+        elif key == "mic":
+            self.toggle_mic()
         elif key == "save":
             self.save()
         elif key == "delete":
@@ -153,6 +207,9 @@ class TaskDetails:
         self.close()
 
     def close(self):
+        if self.listening:
+            dictation.stop()
+            self.listening = False
         app = self.app
         if app.cv.winfo_exists():
             app.cv.bind("<Button-1>", app.on_click)
