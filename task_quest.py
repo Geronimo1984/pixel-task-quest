@@ -12,7 +12,6 @@
 
 Запуск:  python3 task_quest.py
 """
-import atexit
 import json
 import math
 import os
@@ -288,7 +287,6 @@ class Shell:
         root.geometry(f"+{x}+{30}")
         root.createcommand("::tk::mac::ReopenApplication", self.show)  # клик по иконке в Dock
         root.bind_all("<ButtonPress>", titlebar.mac_make_key, add="+")   # щелчок по окну возвращает клавиатуру
-        atexit.register(titlebar.mac_restore_classes)
         root.after(150, self.show)
         root.after(800, self.skin_icons)   # иконки для выбора скина — заранее, пока окно простаивает
 

@@ -54,34 +54,9 @@ def mac_window_polish():
 # принудительно при запуске. Стоит активности уйти (системный индикатор языка у поля ввода, диктовка,
 # другое приложение) — вернуть её нельзя, и нажатия клавиш никуда не попадают. Подменяем класс окна
 # подклассом, который отвечает YES, и возвращаем окну клавиатуру при щелчках.
-_KEY_CLASS = None
 _KEY_IMP = None
+_KEY_DONE = False
 _BOOL_IMP = ctypes.CFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
-
-
-def _key_capable_class():
-    global _KEY_CLASS, _KEY_IMP
-    if _KEY_CLASS:
-        return _KEY_CLASS
-    _objc.objc_allocateClassPair.restype = ctypes.c_void_p
-    _objc.objc_allocateClassPair.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_size_t]
-    _objc.class_addMethod.restype = ctypes.c_bool
-    _objc.class_addMethod.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_char_p]
-    _objc.objc_registerClassPair.argtypes = [ctypes.c_void_p]
-    _objc.objc_lookUpClass.restype = ctypes.c_void_p
-    _objc.objc_lookUpClass.argtypes = [ctypes.c_char_p]
-    cls = _objc.objc_lookUpClass(b"TQKeyWindow")
-    if not cls:
-        base = _objc.objc_lookUpClass(b"TKWindow")
-        if not base:
-            return None
-        cls = _objc.objc_allocateClassPair(base, b"TQKeyWindow", 0)
-        _KEY_IMP = _BOOL_IMP(lambda self, sel: True)
-        for sel in (b"canBecomeKeyWindow", b"canBecomeMainWindow"):
-            _objc.class_addMethod(cls, _objc.sel_registerName(sel), ctypes.cast(_KEY_IMP, ctypes.c_void_p), b"c@:")
-        _objc.objc_registerClassPair(cls)
-    _KEY_CLASS = cls
-    return cls
 
 
 def _class_name(obj):
@@ -92,36 +67,30 @@ def _tk_windows():
     wins = _send(_nsapp(), b"windows")
     for i in range(_send(wins, b"count", ctypes.c_ulong)):
         w = _send(wins, b"objectAtIndex:", ctypes.c_void_p, (ctypes.c_ulong,), i)
-        if _class_name(w) in (b"TKWindow", b"TQKeyWindow"):
+        if _class_name(w) == b"TKWindow":
             yield w
 
 
 def mac_key_capable():
-    """Окна приложения снова могут становиться активными для клавиатуры."""
-    if not _objc:
+    """Окна Tk снова могут становиться активными для клавиатуры.
+
+    Класс окна не меняем (Tk проверяет его точно — иначе перестаёт принимать щелчки), а подставляем
+    в сам класс TKWindow ответ canBecomeKeyWindow = YES."""
+    global _KEY_IMP, _KEY_DONE
+    if not _objc or _KEY_DONE:
         return
     try:
-        cls = _key_capable_class()
+        _objc.objc_lookUpClass.restype = ctypes.c_void_p
+        _objc.objc_lookUpClass.argtypes = [ctypes.c_char_p]
+        _objc.class_replaceMethod.restype = ctypes.c_void_p
+        _objc.class_replaceMethod.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_char_p]
+        cls = _objc.objc_lookUpClass(b"TKWindow")
         if not cls:
             return
-        _objc.object_setClass.restype = ctypes.c_void_p
-        _objc.object_setClass.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
-        for w in _tk_windows():
-            if _class_name(w) == b"TKWindow":
-                _objc.object_setClass(w, cls)
-    except (AttributeError, OSError, ValueError, ctypes.ArgumentError):
-        pass
-
-
-def mac_restore_classes():
-    """При выходе возвращаем окнам родной класс Tk (подкласс держит ссылку на функцию Python)."""
-    if not _objc or not _KEY_CLASS:
-        return
-    try:
-        base = _objc.objc_lookUpClass(b"TKWindow")
-        for w in _tk_windows():
-            if _class_name(w) == b"TQKeyWindow":
-                _objc.object_setClass(w, base)
+        _KEY_IMP = _BOOL_IMP(lambda self, sel: True)
+        _objc.class_replaceMethod(cls, _objc.sel_registerName(b"canBecomeKeyWindow"),
+                                  ctypes.cast(_KEY_IMP, ctypes.c_void_p), b"c@:")
+        _KEY_DONE = True
     except (AttributeError, OSError, ValueError, ctypes.ArgumentError):
         pass
 
@@ -152,7 +121,7 @@ def mac_keep_key():
         if not _send(app, b"isActive", ctypes.c_bool):
             return
         key = _send(app, b"keyWindow")
-        if key and _class_name(key) in (b"TKWindow", b"TQKeyWindow"):
+        if key and _class_name(key) == b"TKWindow":
             return
         for w in _tk_windows():
             if _send(w, b"isVisible", ctypes.c_bool):
