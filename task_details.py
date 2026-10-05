@@ -7,7 +7,7 @@ import tkinter as tk
 
 import dictation
 import titlebar
-from pixel_tracker import fmt_hms
+from pixel_tracker import fmt_hms, parse_hms
 
 WIDTH = 392
 PAD = 16
@@ -15,7 +15,7 @@ PAD = 16
 
 class TaskDetails:
     def __init__(self, app, task, statuses, on_save, skin="moon"):
-        """statuses — список (ключ, подпись, цвет); on_save(task_id, name, status, comment)."""
+        """statuses — список (ключ, подпись, цвет); on_save(task_id, name, status, comment, new_total)."""
         self.app, self.task, self.statuses, self.on_save = app, task, statuses, on_save
         root = app.root
         style = titlebar.STYLES.get(skin, titlebar.MoonStyle)
@@ -51,8 +51,16 @@ class TaskDetails:
         # время
         total = app.task_total(task["id"])
         today = app.task_today(task["id"]) if hasattr(app, "task_today") else 0
-        cv.create_text(PAD, 138, text=f"Время: всего {fmt_hms(total)} · сегодня {fmt_hms(today)}",
-                       fill=p["text"], font=self.font(11), anchor="w")
+        # общее время можно поправить вручную: «1:30:00», «1:30», «90» (минуты), «1ч 30м»
+        cv.create_text(PAD, 138, text="Время: всего", fill=p["text"], font=self.font(11), anchor="w")
+        self.time_orig = fmt_hms(total)
+        self.time = tk.Entry(cv, font=self.font(12), bg="#ffffff", fg="#26306e", relief="flat", justify="center",
+                             insertbackground=p["hover_line"], highlightthickness=2,
+                             highlightbackground=p["border"], highlightcolor=p["hover_line"])
+        self.time.insert(0, self.time_orig)
+        cv.create_window(PAD + 102, 126, anchor="nw", window=self.time, width=92, height=24)
+        cv.create_text(PAD + 202, 138, text=f"· сегодня {fmt_hms(today)}", fill=p["text"], font=self.font(11),
+                       anchor="w")
 
         # комментарий
         cv.create_text(PAD, 164, text="Комментарий", fill=p["sub"], font=self.font(10), anchor="w")
@@ -76,11 +84,11 @@ class TaskDetails:
         cv.bind("<Motion>", self.on_motion)
         cv.bind("<Leave>", lambda e: self.set_hover(None))
         cv.bind("<Button-1>", self.on_click)
-        for w in (cv, self.bar.cv, self.name, self.comment):
+        for w in (cv, self.bar.cv, self.name, self.comment, self.time):
             w.bind("<Escape>", lambda e: self.cancel())
             w.bind("<Command-Return>", lambda e: (self.save(), "break")[1])
             w.bind("<Control-Return>", lambda e: (self.save(), "break")[1])
-        for w in (cv, self.bar.cv, self.name, self.comment):
+        for w in (cv, self.bar.cv, self.name, self.comment, self.time):
             w.bind("<Return>", lambda e: (self.save(), "break")[1])
             w.bind("<KP_Enter>", lambda e: (self.save(), "break")[1])
         # новая строка в комментарии — Shift+Enter (или ⌥+Enter)
@@ -248,8 +256,17 @@ class TaskDetails:
         self.commit_draft()
         name = self.name.get().strip() or self.task["name"]
         comment = self.comment.get("1.0", "end").rstrip()
+        new_total = None
+        raw = self.time.get().strip()
+        if raw != self.time_orig:
+            new_total = parse_hms(raw)
+            if new_total is None:   # непонятное время — не закрываем, подсвечиваем поле
+                self.time.config(highlightbackground="#ff3b5c", highlightcolor="#ff3b5c")
+                self.time.focus_set()
+                self.app.show_toast("Время: например 1:30:00, 1:30 или 90 (минуты)", 40)
+                return
         self.close()
-        self.on_save(self.task["id"], name, self.status, comment)
+        self.on_save(self.task["id"], name, self.status, comment, new_total)
 
     def cancel(self):
         self.close()

@@ -237,6 +237,40 @@ DIGITS = {
 }
 
 
+def parse_hms(text):
+    """«1:30:00», «1:30» (часы:минуты), «90» (минуты), «1ч 30м», «45м» → секунды; None, если не разобрать."""
+    s = text.strip().lower().replace(",", ".")
+    if not s:
+        return None
+    try:
+        if ":" in s:
+            parts = [int(p) for p in s.split(":")]
+            if len(parts) == 2:
+                h, m, sec = parts[0], parts[1], 0
+            elif len(parts) == 3:
+                h, m, sec = parts
+            else:
+                return None
+            if m >= 60 or sec >= 60 or min(parts) < 0:
+                return None
+            return h * 3600 + m * 60 + sec
+        if "ч" in s or "м" in s or "с" in s:
+            total, num = 0, ""
+            for ch in s.replace(" ", ""):
+                if ch.isdigit() or ch == ".":
+                    num += ch
+                elif ch in "чмс" and num:
+                    total += float(num) * {"ч": 3600, "м": 60, "с": 1}[ch]
+                    num = ""
+                elif ch not in "иунаот":   # «мин», «сек», «час» — хвосты слов
+                    return None
+            return int(total) if not num else None
+        minutes = float(s)
+        return int(minutes * 60) if minutes >= 0 else None
+    except ValueError:
+        return None
+
+
 def fmt_hms(sec):
     sec = int(sec)
     return f"{sec // 3600:02d}:{sec % 3600 // 60:02d}:{sec % 60:02d}"
@@ -408,6 +442,38 @@ class App:
         if r and r["task_id"] == tid:
             total += time.time() - r["start"]
         return total
+
+    def set_task_total(self, tid, seconds):
+        """Ручная правка общего времени квеста.
+
+        Больше — добавляется ручная сессия на разницу, закончившаяся сейчас (войдёт и в «сегодня»).
+        Меньше — время срезается с самых свежих сессий. Идущая сессия продолжается; если новое время
+        меньше уже идущей сессии — она начинается заново так, чтобы итог совпал."""
+        seconds = max(0, int(seconds))
+        now = time.time()
+        r = self.data["running"]
+        run = now - r["start"] if r and r["task_id"] == tid else 0
+        if seconds < run:   # новое время меньше идущей сессии: прошлые сессии убираем, сессию «укорачиваем»
+            self.data["sessions"] = [s for s in self.data["sessions"] if s["task_id"] != tid]
+            r["start"] = now - seconds
+        else:
+            stored = sum(s["end"] - s["start"] for s in self.data["sessions"] if s["task_id"] == tid)
+            delta = seconds - run - stored
+            if delta > 0:
+                end = r["start"] if run else now   # ручная сессия не пересекается с идущей
+                self.data["sessions"].append({"task_id": tid, "start": end - delta, "end": end, "manual": True})
+            elif delta < 0:
+                cut = -delta
+                for s in sorted((s for s in self.data["sessions"] if s["task_id"] == tid),
+                                key=lambda s: s["end"], reverse=True):
+                    take = min(cut, s["end"] - s["start"])
+                    s["end"] -= take
+                    cut -= take
+                    if cut <= 0:
+                        break
+                self.data["sessions"] = [s for s in self.data["sessions"] if s["end"] - s["start"] > 0.5]
+        self.recompute()
+        self.save()
 
     def task_today(self, tid):
         """Время задачи за сегодня (с идущей сессией)."""

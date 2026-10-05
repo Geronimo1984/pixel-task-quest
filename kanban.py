@@ -273,12 +273,15 @@ class KanbanMixin:
             self.overlay_changed(True)
         self.details = task_details.TaskDetails(self, t, statuses, self.save_details, skin=self.KB_SKIN)
 
-    def save_details(self, tid, name, status, comment):
+    def save_details(self, tid, name, status, comment, new_total=None):
         t = self.task(tid)
         if not t:
             return
         changed = (name, comment, status) != (t["name"], t.get("comment", ""), self.status_of(t))
         t["name"], t["comment"] = name, comment
+        if new_total is not None:
+            self.set_task_total(tid, new_total)
+            changed = True
         self.save()
         if status != self.status_of(t):
             self.set_status(tid, status)   # «Готово» — с остановкой таймера и своим оповещением
