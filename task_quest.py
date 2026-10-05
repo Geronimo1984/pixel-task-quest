@@ -23,6 +23,7 @@ import task_quest_2000 as tq
 import task_quest_moon as tm
 import task_quest_md as tmd
 import task_quest_terminal as tt
+import textedit
 import titlebar
 from pixel_tracker import mix
 from task_quest_2000 import N
@@ -287,6 +288,7 @@ class Shell:
         root.geometry(f"+{x}+{30}")
         root.createcommand("::tk::mac::ReopenApplication", self.show)  # клик по иконке в Dock
         root.bind_all("<ButtonPress>", titlebar.mac_make_key, add="+")   # щелчок по окну возвращает клавиатуру
+        textedit.install(root)   # ⌘C/⌘V/⌘X/⌘A в любой раскладке и меню правой кнопки в полях ввода
         root.after(150, self.show)
         root.after(800, self.skin_icons)   # иконки для выбора скина — заранее, пока окно простаивает
 
