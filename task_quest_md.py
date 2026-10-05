@@ -53,6 +53,7 @@ DISC_COAST = (0.15, 0.55)  # выбег: постоянное трение + т�
 HUB_AT, SHUTTER_AT = (222, 220), (282, 150)
 LABEL = (300, 171, 468, 276)                                 # чёрное окошко ярлыка на шторке
 PANEL_Y = 466                                                # нижняя панель — под картриджем
+MUSIC_LEVEL = 0.5          # пасхалка играет на 50 % от максимальной громкости системы
 DISC_EVERY_SEC = 20                                          # пока идёт таймер, диск меняется сам
 
 C = {
@@ -239,12 +240,29 @@ class AppMD(tq.App2):
         choice = random.choice([t for t in tracks if t != last] or tracks)
         self.stop_track()
         try:
-            AppMD.player = subprocess.Popen([player, choice], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            AppMD.player = subprocess.Popen([player, "-v", f"{self.music_volume():.3f}", choice],
+                                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except OSError:
             return
         self.last_track = choice
         self.show_toast("♪ " + self.track_title(choice).upper(), 45)
         self.spin()   # пока играет музыка, диск крутится
+
+    @staticmethod
+    def music_volume():
+        """Громкость для afplay, чтобы итог был MUSIC_LEVEL от максимума системы.
+
+        Звук на выходе = громкость системы × громкость afplay, поэтому делим на текущую громкость системы.
+        Системные настройки не трогаем: если система тише 50 %, играем на полную громкость файла (1.0)."""
+        try:
+            out = subprocess.run(["osascript", "-e", "output volume of (get volume settings)"],
+                                 capture_output=True, text=True, timeout=2).stdout.strip()
+            system = int(out) / 100
+        except (OSError, ValueError, subprocess.SubprocessError):
+            return MUSIC_LEVEL
+        if system <= 0:
+            return MUSIC_LEVEL
+        return min(1.0, MUSIC_LEVEL / system)
 
     @staticmethod
     def music_playing():
