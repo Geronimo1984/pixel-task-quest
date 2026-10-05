@@ -87,6 +87,9 @@ class TaskDetails:
         self.comment.bind("<Shift-Return>", lambda e: (self.comment.insert("insert", "\n"), "break")[1])
         self.comment.bind("<Option-Return>", lambda e: (self.comment.insert("insert", "\n"), "break")[1])
         cv.bind("<space>", lambda e: "break")
+        # ввод с клавиатуры всегда возвращается в поле: щелчок по нему подтверждает «черновик» диктовки
+        for w in (self.name, self.comment):
+            w.bind("<Button-1>", self.ensure_input, add="+")
         for w in (cv, self.bar.cv, self.name, self.comment):
             w.bind("<Command-d>", lambda e: (self.toggle_mic(), "break")[1])
 
@@ -95,7 +98,10 @@ class TaskDetails:
         self.frame.place(in_=app.cv, relx=0.5, rely=0.5, anchor="center")
         self.frame.lift()
         self.draw_mic()
-        self.comment.focus_set()
+        self.commit_draft()
+        self.draft_seen = None
+        self.frame.after(700, self.watch_draft)
+        self.comment.focus_force()
         self.comment.mark_set("insert", "end")
 
     def draw_controls(self):
@@ -138,12 +144,50 @@ class TaskDetails:
             cv.create_text(x1 + 21, (y1 + y2) / 2, text="Голосом", fill=p["hover_text"] if hov else p["text"],
                            font=self.font(9), anchor="w", tags="mic")
 
+    def watch_draft(self):
+        """Сторож: если черновик диктовки завис (диктовку выключили не нашей кнопкой или она оборвалась),
+        через 3 секунды без изменений подтверждаем его — иначе клавиатура не печатает в поле."""
+        if not self.frame.winfo_exists():
+            return
+        if not self.listening and dictation.has_draft():
+            snapshot = self.comment.get("1.0", "end-1c")
+            if self.draft_seen and self.draft_seen[0] == snapshot:
+                if self.frame.tk.call("clock", "milliseconds") - self.draft_seen[1] > 3000:
+                    self.commit_draft()
+                    self.draft_seen = None
+            else:
+                self.draft_seen = (snapshot, self.frame.tk.call("clock", "milliseconds"))
+        else:
+            self.draft_seen = None
+        self.frame.after(700, self.watch_draft)
+
+    def ensure_input(self, _e=None):
+        if not self.listening:
+            self.commit_draft()
+
+    def commit_draft(self):
+        """Подтверждает «черновик» диктовки: надиктованное остаётся в поле обычным текстом,
+        а клавиатура снова печатает в поле (иначе нажатия съедаются).
+
+        Tk помечает черновик тегом IMEmarkedtext и при сбросе удаляет помеченное — снимаем метку заранее,
+        а для поля названия (Entry) возвращаем текст, если Tk его всё-таки убрал."""
+        name_before = self.name.get()
+        self.comment.tag_remove("IMEmarkedtext", "1.0", "end")
+        dictation.reset_input()
+
+        def restore():
+            if self.frame.winfo_exists() and self.name.get() != name_before:
+                self.name.delete(0, "end")
+                self.name.insert(0, name_before)
+        self.frame.after_idle(restore)
+
     def toggle_mic(self):
         if not self.mic:
             return
         if self.listening:
-            dictation.stop()
+            dictation.stop_only()
             self.listening = False
+            self.commit_draft()
         else:
             self.listening = dictation.start(self.comment)
             if self.listening:
@@ -198,6 +242,10 @@ class TaskDetails:
             self.cancel()
 
     def save(self):
+        if self.listening:   # сохраняем во время диктовки — сначала остановить и подтвердить надиктованное
+            dictation.stop_only()
+            self.listening = False
+        self.commit_draft()
         name = self.name.get().strip() or self.task["name"]
         comment = self.comment.get("1.0", "end").rstrip()
         self.close()
@@ -208,7 +256,7 @@ class TaskDetails:
 
     def close(self):
         if self.listening:
-            dictation.stop()
+            dictation.stop_only()
             self.listening = False
         app = self.app
         if app.cv.winfo_exists():
