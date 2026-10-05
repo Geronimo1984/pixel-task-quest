@@ -244,6 +244,28 @@ class AppMD(tq.App2):
             return
         self.last_track = choice
         self.show_toast("♪ " + self.track_title(choice).upper(), 45)
+        self.spin()   # пока играет музыка, диск крутится
+
+    @staticmethod
+    def music_playing():
+        proc = getattr(AppMD, "player", None)
+        return bool(proc and proc.poll() is None)
+
+    def disc_driven(self):
+        """Диск крутится, пока идёт таймер или играет трек пасхалки."""
+        return bool(self.data["running"]) or self.music_playing()
+
+    def toggle(self):
+        """START / STOP. STOP заодно выключает музыку; если играет только музыка — STOP выключает её."""
+        if self.music_playing() and not self.data["running"]:
+            self.press("main")
+            self.stop_track()
+            self.show_toast("МУЗЫКА ОСТАНОВЛЕНА", 25)
+            return
+        was_running = bool(self.data["running"])
+        super().toggle()
+        if was_running:
+            self.stop_track()
 
     @staticmethod
     def stop_track():
@@ -302,7 +324,7 @@ class AppMD(tq.App2):
         now = time.perf_counter()
         dt, self.disc_last = min(0.2, now - self.disc_last), now
         v = self.disc_speed
-        if self.data["running"]:
+        if self.disc_driven():
             if v < DISC_SPEED:
                 v = min(DISC_SPEED, v + DISC_SPEED / DISC_SPINUP * dt * (2.5 if v < 0 else 1))
         elif v > 0:
@@ -312,7 +334,7 @@ class AppMD(tq.App2):
         self.disc_speed = v
         self.disc_angle = (self.disc_angle + v * dt) % 360
         self.show_disc()
-        if v or self.data["running"]:
+        if v or self.disc_driven():
             self._disc_after = self.root.after(DISC_MS, self.disc_step)
 
     def show_disc(self):
@@ -432,7 +454,8 @@ class AppMD(tq.App2):
         self.attach_native()
         if self.native:
             self.native.follow(*self.disc_origin())
-        if running or self.disc_speed:
+        music = self.music_playing()
+        if running or music or self.disc_speed:
             self.spin()
         self.show_disc()
 
@@ -445,12 +468,15 @@ class AppMD(tq.App2):
         else:
             caption = (sel["name"] if sel else "НЕТ ТРЕКА").upper()
         caption = caption if len(caption) <= 40 else caption[:39] + "…"
-        status = ("● REC" if (f // 6) % 2 else "○ REC") if running else "❚❚ PAUSE"
+        if running:
+            status = "● REC" if (f // 6) % 2 else "○ REC"
+        else:
+            status = "♪ PLAY" if music else "❚❚ PAUSE"
         day = fmt_hms(today)
         self.section("label", (day, caption, status, track),
                      lambda: self.draw_label(day, caption, status, running, track))
 
-        btn_key = (running, self.hover, self.topmost, tuple(self.pressed.get(n, -1) >= f for n, *_ in BUTTONS),
+        btn_key = (running, music, self.hover, self.topmost, tuple(self.pressed.get(n, -1) >= f for n, *_ in BUTTONS),
                    (f // 5) % 2 if self.hover else 0)
         self.section("buttons", btn_key, lambda: self.draw_buttons(running, f))
 
@@ -537,7 +563,7 @@ class AppMD(tq.App2):
                 "csv": self.export_csv, "top": self.toggle_top, "skin": self.switch_skin, "clear": self.clear_tasks}
         for name, label, x1, x2 in BUTTONS:
             if name == "main":
-                label = "■ STOP" if running else "▶ START"
+                label = "■ STOP" if running or self.music_playing() else "▶ START"
             down = self.pressed.get(name, -1) >= f
             hover = self.hover == name
             if hover:   # подсветка в стиле старых меню: инверсия и мигающий курсор
