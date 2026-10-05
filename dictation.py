@@ -61,6 +61,7 @@ def reset_input():
     if not AVAILABLE:
         return
     try:
+        _tb.mac_make_key()
         app = _tb._nsapp()
         win = _tb._send(app, b"keyWindow")
         if not win:

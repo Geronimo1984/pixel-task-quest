@@ -106,9 +106,10 @@ class TaskDetails:
         self.frame.place(in_=app.cv, relx=0.5, rely=0.5, anchor="center")
         self.frame.lift()
         self.draw_mic()
+        titlebar.mac_make_key()   # клавиатура — в окно приложения, даже если её забрало системное окно
         self.commit_draft()
         self.draft_seen = None
-        self.frame.after(700, self.watch_draft)
+        self.frame.after(150, self.watch_draft)   # первая проверка — сразу, пока не начали печатать
         self.comment.focus_force()
         self.comment.mark_set("insert", "end")
 
@@ -157,6 +158,7 @@ class TaskDetails:
         через 3 секунды без изменений подтверждаем его — иначе клавиатура не печатает в поле."""
         if not self.frame.winfo_exists():
             return
+        titlebar.mac_keep_key()   # клавиатура — у окна приложения, пока открыта карточка
         if not self.listening and dictation.has_draft():
             snapshot = self.comment.get("1.0", "end-1c")
             if self.draft_seen and self.draft_seen[0] == snapshot:
@@ -167,7 +169,7 @@ class TaskDetails:
                 self.draft_seen = (snapshot, self.frame.tk.call("clock", "milliseconds"))
         else:
             self.draft_seen = None
-        self.frame.after(700, self.watch_draft)
+        self.frame.after(150, self.watch_draft)   # первая проверка — сразу, пока не начали печатать
 
     def ensure_input(self, _e=None):
         if not self.listening:

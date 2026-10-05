@@ -12,6 +12,7 @@
 
 Запуск:  python3 task_quest.py
 """
+import atexit
 import json
 import math
 import os
@@ -286,6 +287,8 @@ class Shell:
         x = max(0, (root.winfo_screenwidth() - root.winfo_reqwidth()) // 2)
         root.geometry(f"+{x}+{30}")
         root.createcommand("::tk::mac::ReopenApplication", self.show)  # клик по иконке в Dock
+        root.bind_all("<ButtonPress>", titlebar.mac_make_key, add="+")   # щелчок по окну возвращает клавиатуру
+        atexit.register(titlebar.mac_restore_classes)
         root.after(150, self.show)
         root.after(800, self.skin_icons)   # иконки для выбора скина — заранее, пока окно простаивает
 
@@ -310,6 +313,7 @@ class Shell:
         self.root.deiconify()
         self.root.lift()
         titlebar.mac_window_polish()
+        titlebar.mac_key_capable()   # окно без рамки снова может принимать ввод с клавиатуры
         self.root.focus_force()
 
     def skin_icons(self):
