@@ -38,20 +38,35 @@ def start(widget):
         return False
 
 
+def _input_context():
+    win = _tb._send(_tb._nsapp(), b"keyWindow")
+    view = _tb._send(win, b"contentView") if win else None
+    return _tb._send(view, b"inputContext") if view else None
+
+
+def _responds(obj, sel):
+    return bool(obj) and _tb._send(obj, b"respondsToSelector:", ctypes.c_bool, (ctypes.c_void_p,),
+                                   _tb._objc.sel_registerName(sel))
+
+
 def stop_only():
     """Выключить диктовку и спрятать системный значок микрофона
-    (черновик подтверждает тот, кто знает поле, — см. TaskDetails.commit_draft)."""
-    if AVAILABLE:
-        try:
-            _action(b"stopDictation:")
-            win = _tb._send(_tb._nsapp(), b"keyWindow")
-            view = _tb._send(win, b"contentView") if win else None
-            ctx = _tb._send(view, b"inputContext") if view else None
-            if ctx and _tb._send(ctx, b"respondsToSelector:", ctypes.c_bool, (ctypes.c_void_p,),
-                                 _tb._objc.sel_registerName(b"hideDictationIndicator")):
-                _tb._send(ctx, b"hideDictationIndicator")
-        except (AttributeError, OSError, ValueError, ctypes.ArgumentError):
-            pass
+    (черновик подтверждает тот, кто знает поле, — см. TaskDetails.commit_draft).
+
+    Общая команда приложения stopDictation: диктовку в поле Tk не останавливает, поэтому сначала
+    останавливаем её у самого поля ввода (контекст ввода), а общую команду посылаем вдогонку."""
+    if not AVAILABLE:
+        return
+    try:
+        ctx = _input_context()
+        if _responds(ctx, b"_stopDictation:"):
+            _tb._send(ctx, b"_stopDictation:", None, (ctypes.c_void_p,), None)
+        _action(b"stopDictation:")
+        ctx = _input_context()
+        if _responds(ctx, b"hideDictationIndicator"):
+            _tb._send(ctx, b"hideDictationIndicator")
+    except (AttributeError, OSError, ValueError, ctypes.ArgumentError):
+        pass
 
 
 def stop():
