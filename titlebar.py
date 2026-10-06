@@ -112,16 +112,16 @@ def mac_make_key(_event=None):
 
 
 def mac_keep_key():
-    """Пока приложение активно, клавиатура остаётся у его окна: если её забрало системное окошко
-    (индикатор языка у поля ввода и т.п.), возвращаем. Другие приложения не трогаем."""
+    """Пока приложение активно, у него должно быть окно для клавиатуры: если активного окна нет совсем,
+    возвращаем клавиатуру окну приложения. Системные окошки (диктовка, индикатор языка) не трогаем —
+    иначе диктовка перезапускается и лагает. Другие приложения тоже не трогаем."""
     if not _objc:
         return
     try:
         app = _nsapp()
         if not _send(app, b"isActive", ctypes.c_bool):
             return
-        key = _send(app, b"keyWindow")
-        if key and _class_name(key) == b"TKWindow":
+        if _send(app, b"keyWindow"):
             return
         for w in _tk_windows():
             if _send(w, b"isVisible", ctypes.c_bool):

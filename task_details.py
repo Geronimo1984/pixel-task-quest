@@ -158,7 +158,8 @@ class TaskDetails:
         через 3 секунды без изменений подтверждаем его — иначе клавиатура не печатает в поле."""
         if not self.frame.winfo_exists():
             return
-        titlebar.mac_keep_key()   # клавиатура — у окна приложения, пока открыта карточка
+        if not self.listening:   # пока идёт запись голосом, фокус не трогаем
+            titlebar.mac_keep_key()   # клавиатура — у окна приложения, пока открыта карточка
         if not self.listening and dictation.has_draft():
             snapshot = self.comment.get("1.0", "end-1c")
             if self.draft_seen and self.draft_seen[0] == snapshot:
@@ -172,7 +173,8 @@ class TaskDetails:
         self.frame.after(150, self.watch_draft)   # первая проверка — сразу, пока не начали печатать
 
     def ensure_input(self, _e=None):
-        if not self.listening:
+        """Щелчок в поле: что-то делаем, только если там завис черновик диктовки."""
+        if not self.listening and dictation.has_draft():
             self.commit_draft()
 
     def commit_draft(self):

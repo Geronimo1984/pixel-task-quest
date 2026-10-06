@@ -39,10 +39,17 @@ def start(widget):
 
 
 def stop_only():
-    """Выключить диктовку (черновик подтверждает тот, кто знает поле, — см. TaskDetails.commit_draft)."""
+    """Выключить диктовку и спрятать системный значок микрофона
+    (черновик подтверждает тот, кто знает поле, — см. TaskDetails.commit_draft)."""
     if AVAILABLE:
         try:
             _action(b"stopDictation:")
+            win = _tb._send(_tb._nsapp(), b"keyWindow")
+            view = _tb._send(win, b"contentView") if win else None
+            ctx = _tb._send(view, b"inputContext") if view else None
+            if ctx and _tb._send(ctx, b"respondsToSelector:", ctypes.c_bool, (ctypes.c_void_p,),
+                                 _tb._objc.sel_registerName(b"hideDictationIndicator")):
+                _tb._send(ctx, b"hideDictationIndicator")
         except (AttributeError, OSError, ValueError, ctypes.ArgumentError):
             pass
 
@@ -67,14 +74,19 @@ def reset_input():
         if not win:
             return
         view = _tb._send(win, b"contentView")
-        responds = lambda obj, sel: _tb._send(obj, b"respondsToSelector:", ctypes.c_bool, (ctypes.c_void_p,),
-                                              _tb._objc.sel_registerName(sel))
-        if view and responds(view, b"unmarkText"):
-            _tb._send(view, b"unmarkText")
-        ctx = _tb._send(view, b"inputContext") if view else None
-        if ctx:
-            _tb._send(ctx, b"discardMarkedText")
-        if view:
+        if not view:
+            return
+        # трогаем ввод только если черновик действительно есть: лишние сбросы и смена получателя ввода
+        # заставляют macOS снова запускать диктовку при каждом щелчке
+        if _tb._send(view, b"hasMarkedText", ctypes.c_bool):
+            responds = lambda obj, sel: _tb._send(obj, b"respondsToSelector:", ctypes.c_bool, (ctypes.c_void_p,),
+                                                  _tb._objc.sel_registerName(sel))
+            if responds(view, b"unmarkText"):
+                _tb._send(view, b"unmarkText")
+            ctx = _tb._send(view, b"inputContext")
+            if ctx:
+                _tb._send(ctx, b"discardMarkedText")
+        if _tb._send(win, b"firstResponder") != view:
             _tb._send(win, b"makeFirstResponder:", ctypes.c_bool, (ctypes.c_void_p,), view)
     except (AttributeError, OSError, ValueError, ctypes.ArgumentError):
         pass
