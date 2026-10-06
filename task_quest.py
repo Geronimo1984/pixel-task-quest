@@ -287,7 +287,6 @@ class Shell:
         x = max(0, (root.winfo_screenwidth() - root.winfo_reqwidth()) // 2)
         root.geometry(f"+{x}+{30}")
         root.createcommand("::tk::mac::ReopenApplication", self.show)  # клик по иконке в Dock
-        root.bind_all("<ButtonPress>", titlebar.mac_make_key, add="+")   # щелчок по окну возвращает клавиатуру
         textedit.install(root)   # ⌘C/⌘V/⌘X/⌘A в любой раскладке и меню правой кнопки в полях ввода
         root.after(150, self.show)
         root.after(800, self.skin_icons)   # иконки для выбора скина — заранее, пока окно простаивает

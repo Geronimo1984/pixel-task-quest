@@ -38,8 +38,17 @@ def start(widget):
         return False
 
 
+def _app_window():
+    """Окно приложения (Tk), а не «активное окно»: во время диктовки активным может быть её же
+    системное окошко с микрофоном, и команды уходили бы ему."""
+    for w in _tb._tk_windows():
+        if _tb._send(w, b"isVisible", ctypes.c_bool):
+            return w
+    return _tb._send(_tb._nsapp(), b"keyWindow")
+
+
 def _input_context():
-    win = _tb._send(_tb._nsapp(), b"keyWindow")
+    win = _app_window()
     view = _tb._send(win, b"contentView") if win else None
     return _tb._send(view, b"inputContext") if view else None
 
@@ -69,6 +78,44 @@ def stop_only():
         pass
 
 
+def end_session(widget, then=None):
+    """Надёжно закончить диктовку: команды остановки диктовка в поле Tk выполняет не всегда, а вот
+    уход фокуса из приложения заканчивает её всегда. На долю секунды отдаём фокус Finder и сразу
+    возвращаем полю (окно остаётся на месте, курсор — в поле). then() — после возврата."""
+    stop_only()
+    if not AVAILABLE:
+        if then:
+            then()
+        return
+    try:
+        ws = _tb._send(_tb._objc.objc_getClass(b"NSWorkspace"), b"sharedWorkspace")
+        apps = _tb._send(ws, b"runningApplications")
+        for i in range(_tb._send(apps, b"count", ctypes.c_ulong)):
+            a = _tb._send(apps, b"objectAtIndex:", ctypes.c_void_p, (ctypes.c_ulong,), i)
+            bid = _tb._send(a, b"bundleIdentifier")
+            if bid and ctypes.cast(_tb._send(bid, b"UTF8String"), ctypes.c_char_p).value == b"com.apple.finder":
+                _tb._send(a, b"activateWithOptions:", ctypes.c_bool, (ctypes.c_ulong,), 0)
+                break
+    except (AttributeError, OSError, ValueError, ctypes.ArgumentError):
+        pass
+
+    def back():
+        try:
+            _tb._send(_tb._nsapp(), b"activateIgnoringOtherApps:", None, (ctypes.c_bool,), True)
+            win = _app_window()
+            if win:
+                _tb._send(win, b"makeKeyAndOrderFront:", None, (ctypes.c_void_p,), None)
+        except (AttributeError, OSError, ValueError, ctypes.ArgumentError):
+            pass
+        try:
+            widget.focus_force()
+        except Exception:   # noqa: BLE001 — карточку уже закрыли
+            pass
+        if then:
+            then()
+    widget.after(350, back)
+
+
 def stop():
     stop_only()
     reset_input()
@@ -83,9 +130,7 @@ def reset_input():
     if not AVAILABLE:
         return
     try:
-        _tb.mac_make_key()
-        app = _tb._nsapp()
-        win = _tb._send(app, b"keyWindow")
+        win = _app_window()
         if not win:
             return
         view = _tb._send(win, b"contentView")
@@ -112,8 +157,23 @@ def has_draft():
     if not AVAILABLE:
         return False
     try:
-        win = _tb._send(_tb._nsapp(), b"keyWindow")
+        win = _app_window()
         view = _tb._send(win, b"contentView") if win else None
         return bool(view) and _tb._send(view, b"hasMarkedText", ctypes.c_bool)
     except (AttributeError, OSError, ValueError, ctypes.ArgumentError):
         return False
+
+
+def active():
+    """Идёт ли диктовка: виден ли системный значок микрофона (окошко TUINSWindow)."""
+    if not AVAILABLE:
+        return False
+    try:
+        wins = _tb._send(_tb._nsapp(), b"windows")
+        for i in range(_tb._send(wins, b"count", ctypes.c_ulong)):
+            w = _tb._send(wins, b"objectAtIndex:", ctypes.c_void_p, (ctypes.c_ulong,), i)
+            if _tb._class_name(w) == b"TUINSWindow" and _tb._send(w, b"isVisible", ctypes.c_bool):
+                return True
+    except (AttributeError, OSError, ValueError, ctypes.ArgumentError):
+        pass
+    return False

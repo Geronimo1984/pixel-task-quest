@@ -185,7 +185,8 @@ class TaskDetails:
         а для поля названия (Entry) возвращаем текст, если Tk его всё-таки убрал."""
         name_before = self.name.get()
         self.comment.tag_remove("IMEmarkedtext", "1.0", "end")
-        dictation.reset_input()
+        if dictation.has_draft():   # без черновика фокус не трогаем — смена фокуса будит диктовку
+            dictation.reset_input()
 
         def restore():
             if self.frame.winfo_exists() and self.name.get() != name_before:
@@ -197,9 +198,9 @@ class TaskDetails:
         if not self.mic:
             return
         if self.listening:
-            dictation.stop_only()
             self.listening = False
-            self.commit_draft()
+            self.comment.tag_remove("IMEmarkedtext", "1.0", "end")   # надиктованное остаётся в поле
+            dictation.end_session(self.comment)
         else:
             self.listening = dictation.start(self.comment)
             if self.listening:
@@ -254,9 +255,10 @@ class TaskDetails:
             self.cancel()
 
     def save(self):
-        if self.listening:   # сохраняем во время диктовки — сначала остановить и подтвердить надиктованное
-            dictation.stop_only()
+        if self.listening:   # сохраняем во время диктовки — надиктованное остаётся, запись заканчивается
             self.listening = False
+            self.comment.tag_remove("IMEmarkedtext", "1.0", "end")
+            dictation.end_session(self.app.cv)
         self.commit_draft()
         name = self.name.get().strip() or self.task["name"]
         comment = self.comment.get("1.0", "end").rstrip()
@@ -276,9 +278,10 @@ class TaskDetails:
         self.close()
 
     def close(self):
-        if self.listening:
-            dictation.stop_only()
+        if self.listening:   # закрываем во время записи — диктовку надёжно заканчиваем
             self.listening = False
+            self.comment.tag_remove("IMEmarkedtext", "1.0", "end")
+            dictation.end_session(self.app.cv)
         app = self.app
         if app.cv.winfo_exists():
             app.cv.bind("<Button-1>", app.on_click)
