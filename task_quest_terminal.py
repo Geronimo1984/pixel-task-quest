@@ -44,7 +44,12 @@ SCREEN_SEC = 20
 DEFAULT_SCREEN = "neo"   # заставка при запуске скина
 SCREEN_IN = 1.6       # секунд на появление (точки загораются каждая в свой момент)
 SCREEN_OUT = 1.0      # секунд на исчезновение перед сменой заставки
-BREATH_TICKS = 2      # кадров скина на один кадр «дыхания»
+# заставка рисуется из исходника символами шрифта скина: плотность символа — яркость картинки
+ASCII_FONT = 4                                   # Menlo 4: клетка 2×5 px → 192×35 символов в окне
+ASCII_LEVELS = [" ", ".,", "`'", ":;", "-~", "=+", "<>", "*x", "#%", "&8", "@$"]   # 0 — пусто … 10 — ярко
+ASCII_SCRAMBLE = "01<>/\\|=+*#ABCDEFXZ$%"
+ASCII_TIERS = [(range(1, 3), "glow"), (range(3, 5), "dim"), (range(5, 7), "mid"), (range(7, 9), "bright"),
+               (range(9, 11), "hot")]
 
 
 def eye_halfheight(dx):
@@ -103,10 +108,10 @@ class AppTerminal(tq.App2):
         self.glitch_until = -1
         self.screen_i = 0
         self.screen_since = time.time()
-        # кадры заставок (tools/bake_term_screens.py): появление in_NN и «дыхание» breath_NN; грузятся при первом показе
-        self.screen_frames = {}
+        # заставки рисуются из исходников assets/term_screens/<имя>.png (tools/prep_term_sources.py)
+        self.ascii = None   # состояние текущей заставки (сетка уровней, моменты «расшифровки»)
         self.screen_names = [n for n, _ in SCREENS
-                             if n == "eye" or os.path.exists(os.path.join(SCREEN_DIR, n, "breath_00.png"))]
+                             if n == "eye" or os.path.exists(os.path.join(SCREEN_DIR, f"{n}.png"))]
         if DEFAULT_SCREEN in self.screen_names:   # первой показывается Нео
             self.screen_i = [n for n, _ in SCREENS].index(DEFAULT_SCREEN)
         self.typed = ("", 0)
@@ -166,14 +171,71 @@ class AppTerminal(tq.App2):
         self.save()
         self.show_toast("Падающие символы: " + ("ВКЛ" if self.data["fx"] else "ВЫКЛ"), 20)
 
-    def frames_of(self, name):
-        if name not in self.screen_frames:
-            folder = os.path.join(SCREEN_DIR, name)
-            files = sorted(os.listdir(folder))
-            self.screen_frames[name] = {
-                kind: [tk.PhotoImage(file=os.path.join(folder, fn)) for fn in files if fn.startswith(kind)]
-                for kind in ("in_", "breath_")}
-        return self.screen_frames[name]
+    def ascii_start(self, name):
+        """Сетка заставки из исходника: уровень плотности каждой клетки и момент её «расшифровки»."""
+        font = tkfont.Font(family=self.font(ASCII_FONT)[0], size=ASCII_FONT)
+        cw, lh = font.measure("M"), font.metrics("linespace")
+        x1, y1, x2, y2 = EYE_PANEL
+        cols, rows = (x2 - x1 - 4) // cw, (y2 - y1 - 4) // lh
+        src = tk.PhotoImage(file=os.path.join(SCREEN_DIR, f"{name}.png"))
+        lum = []
+        for r in range(rows):
+            row = []
+            for c in range(cols):
+                px, py = c * src.width() // cols, r * src.height() // rows
+                pts = [src.get(min(src.width() - 1, px + dx), min(src.height() - 1, py + dy))
+                       for dx in range(cw) for dy in range(0, lh, 2)]
+                row.append(sum(0.3 * p[0] + 0.59 * p[1] + 0.11 * p[2] for p in pts) / len(pts))
+            lum.append(row)
+        flat = sorted(v for row in lum for v in row)
+        lo, hi = flat[int(len(flat) * 0.03)], flat[int(len(flat) * 0.995)]   # растяжение контраста
+        norm = lambda v: max(0.0, min(1.0, (v - lo) / max(1.0, hi - lo)))
+        # контраст сильнее (тёмное темнее), самый тёмный фон — пустые клетки без мелкого мусора
+        levels = [[0 if norm(v) < 0.24 else max(1, round(norm(v) ** 1.5 * 10)) for v in row] for row in lum]
+        self.ascii = {"name": name, "font": (self.font(ASCII_FONT)[0], ASCII_FONT), "cw": cw, "lh": lh,
+                      "levels": levels,
+                      "decode": [[(r / rows) * 0.45 + random.uniform(0, 0.55) for _ in range(cols)] for r in range(rows)],
+                      "var": [[random.randrange(2) for _ in range(cols)] for _ in range(rows)]}
+
+    def ascii_lines(self, t, f):
+        """Строки заставки по цветам фосфора: каждая клетка — символ своей плотности; появление «расшифровкой»,
+        потом диагональная волна света и перемигивание символов, перед сменой — расшифровка наоборот."""
+        a = self.ascii
+        levels, decode, var = a["levels"], a["decode"], a["var"]
+        rows, cols = len(levels), len(levels[0])
+        tiers = {tier: [[" "] * cols for _ in range(rows)] for _, tier in ASCII_TIERS}
+        tier_of = {lvl: tier for rng, tier in ASCII_TIERS for lvl in rng}
+        out_k = (SCREEN_SEC - t) / SCREEN_OUT if t > SCREEN_SEC - SCREEN_OUT else None
+        wave_t = t * 0.35
+        for r in range(rows):
+            for c in range(cols):
+                lvl = levels[r][c]
+                d = decode[r][c]
+                if out_k is not None:            # исчезновение: клетки снова «шифруются» и гаснут
+                    if d > out_k + 0.12:
+                        continue
+                    if d > out_k:
+                        tiers["mid"][r][c] = random.choice(ASCII_SCRAMBLE)
+                        continue
+                else:
+                    when = d * SCREEN_IN
+                    if t < when:                 # ещё не расшифрована: перебор символов перед появлением
+                        if t > when - 0.45 and lvl:
+                            tiers["dim" if random.random() < 0.5 else "mid"][r][c] = random.choice(ASCII_SCRAMBLE)
+                        continue
+                    if t < when + 0.14:          # вспышка в момент, когда клетка встала на место
+                        if lvl:
+                            tiers["hot"][r][c] = ASCII_LEVELS[lvl][var[r][c]]
+                        continue
+                if not lvl:
+                    continue
+                # «дыхание»: диагональная волна света и редкое перемигивание символов той же плотности
+                wave = math.sin(2 * math.pi * wave_t - (c * 0.07 + r * 0.22))
+                cur = max(1, min(10, lvl + round(wave * 1.3)))
+                if random.random() < 0.015:
+                    var[r][c] = 1 - var[r][c]
+                tiers[tier_of[cur]][r][c] = ASCII_LEVELS[cur][var[r][c]]
+        return {tier: ["".join(row) for row in grid] for tier, grid in tiers.items()}
 
     def next_screen(self):
         """Следующая заставка (сама — раз в SCREEN_SEC, или щелчок по экрану с картинкой)."""
@@ -182,24 +244,23 @@ class AppTerminal(tq.App2):
         nxt = names[(names.index(cur) + 1) % len(names)] if cur in names else names[0]
         self.screen_i = [n for n, _ in SCREENS].index(nxt)
         self.screen_since = time.time()
+        self.ascii = None
 
     def draw_screen(self, name, label, f):
-        """Заставка: точки загораются каждая в свой момент, потом вся картинка «дышит» — каждая точка
-        мерцает в своей фазе; перед сменой точки гаснут в обратном порядке."""
+        """Заставка, нарисованная из исходника символами шрифта скина (см. ascii_lines)."""
         x1, y1, x2, y2 = EYE_PANEL
-        frames = self.frames_of(name)
-        appear, breath = frames["in_"], frames["breath_"]
+        if self.ascii is None or self.ascii["name"] != name:
+            self.ascii_start(name)
+        a = self.ascii
         t = time.time() - self.screen_since
-        if t > SCREEN_SEC - SCREEN_OUT:     # исчезновение — появление наоборот
-            k = (SCREEN_SEC - t) / SCREEN_OUT
-            img = appear[max(0, min(len(appear) - 1, int(k * len(appear))))]
-        elif t < SCREEN_IN:                  # появление
-            img = appear[min(len(appear) - 1, int(t / SCREEN_IN * len(appear)))]
-        else:                                # «дыхание» по кругу
-            img = breath[(f // BREATH_TICKS) % len(breath)]
         self.rect(x1, y1, x2, y2, G["bg"])
-        self.cv.create_image(x1 + 1, y1 + 1, image=img, anchor="nw", tags=self.layer)
-        sy = y1 + 1 + (f * 5) % img.height()   # бегущая полоса развёртки, как на ЭЛТ
+        for tier, lines in self.ascii_lines(t, f).items():
+            for r, line in enumerate(lines):
+                if line.strip():
+                    self.cv.create_text(x1 + 2, y1 + 2 + r * a["lh"], text=line, fill=G[tier], font=a["font"],
+                                        anchor="nw", tags=self.layer)
+        ph = y2 - y1 - 2
+        sy = y1 + 1 + (f * 5) % ph   # бегущая полоса развёртки, как на ЭЛТ
         self.cv.create_rectangle(x1 + 1, sy, x2 - 1, sy + 3, fill=G["bright"], outline="", stipple="gray25",
                                  tags=self.layer)
         for x in range(x1, x2, 6):   # пунктирная рамка, как у глаза
