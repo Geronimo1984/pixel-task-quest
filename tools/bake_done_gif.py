@@ -20,7 +20,7 @@ CGBitmapContextGetData = dr._sig(dr._cg, "CGBitmapContextGetData", ctypes.c_void
 CGBitmapContextGetBytesPerRow = dr._sig(dr._cg, "CGBitmapContextGetBytesPerRow", _sz, ctypes.c_void_p)
 
 
-def bake(src_path, out_dir, height=170, glow=3.0):
+def bake(src_path, out_dir, height=170, glow=4.0):
     os.makedirs(out_dir, exist_ok=True)
     url = dr._url(src_path)
     src = dr.CGImageSourceCreateWithURL(url, None)
@@ -44,8 +44,9 @@ def bake(src_path, out_dir, height=170, glow=3.0):
             for x in range(w):
                 p = row + x * 4
                 m = max(buf[p], buf[p + 1], buf[p + 2])
-                # чёрный фон (почти 0) — прозрачный; уже со слабой яркостью — почти непрозрачный диск
-                a = 0 if m < 6 else min(255, int(60 + m * glow))
+                # непрозрачность плавно растёт с яркостью: чёрный фон прозрачный, край диска — мягкий,
+                # без тёмного ободка (резкий порог давал рваный тёмный контур по краю)
+                a = min(255, int(m * glow))
                 buf[p + 3] = a   # цвета уже не больше непрозрачности — premultiplied остаётся корректным
         out = dr.CGBitmapContextCreateImage(ctx)
         tmp = os.path.join(out_dir, f".{i}.png")
