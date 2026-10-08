@@ -41,10 +41,10 @@ SCREEN_DIR = os.path.join(pt.APP_DIR, "assets", "term_screens")
 SCREENS = [("eye", "WATCHING YOUR TIME"), ("rain", "THE RAIN PRESENTS"), ("neo", "WAKE UP, NEO..."),
            ("bullets", "THERE IS NO SPOON")]
 SCREEN_SEC = 20
-TILE = 16             # картинка собирается из фрагментов TILE×TILE
-ASSEMBLE = 2.4        # секунд на сборку из фрагментов
-SCATTER = 0.9         # секунд на рассыпание перед сменой заставки
-SCREEN_TOP = {"rain": 16, "neo": 18, "bullets": 40}   # какая часть картинки в кадре (сверху, px)
+DEFAULT_SCREEN = "neo"   # заставка при запуске скина
+SCREEN_IN = 1.6       # секунд на появление (точки загораются каждая в свой момент)
+SCREEN_OUT = 1.0      # секунд на исчезновение перед сменой заставки
+BREATH_TICKS = 2      # кадров скина на один кадр «дыхания»
 
 
 def eye_halfheight(dx):
@@ -103,17 +103,12 @@ class AppTerminal(tq.App2):
         self.glitch_until = -1
         self.screen_i = 0
         self.screen_since = time.time()
-        self.screen_src = {}
-        for name, _ in SCREENS[1:]:
-            path = os.path.join(SCREEN_DIR, f"{name}.png")
-            if os.path.exists(path):
-                self.screen_src[name] = tk.PhotoImage(file=path)
-        x1, y1, x2, y2 = EYE_PANEL
-        self.screen_img = tk.PhotoImage(width=x2 - x1 - 2, height=y2 - y1 - 2)
-        # готовая часть кадра: долетевший фрагмент впечатывается сюда один раз, а каждый кадр
-        # копируются только летящие (каждое копирование в Tk стоит ~0,1 мс — тысячу за кадр не успеть)
-        self.screen_settled = tk.PhotoImage(width=x2 - x1 - 2, height=y2 - y1 - 2)
-        self.tiles = None   # фрагменты текущей заставки (откуда летят, задержка)
+        # кадры заставок (tools/bake_term_screens.py): появление in_NN и «дыхание» breath_NN; грузятся при первом показе
+        self.screen_frames = {}
+        self.screen_names = [n for n, _ in SCREENS
+                             if n == "eye" or os.path.exists(os.path.join(SCREEN_DIR, n, "breath_00.png"))]
+        if DEFAULT_SCREEN in self.screen_names:   # первой показывается Нео
+            self.screen_i = [n for n, _ in SCREENS].index(DEFAULT_SCREEN)
         self.typed = ("", 0)
         self.rain = [pt.App.new_drop(x, random.uniform(-H, H)) for x in range(90, W, 14)]
         self.rain_colors = [G["rain_head"]] + [mix(G["rain_tail"], G["bg"], 0.6 * k / RAIN_TRAIL)
@@ -171,87 +166,40 @@ class AppTerminal(tq.App2):
         self.save()
         self.show_toast("Падающие символы: " + ("ВКЛ" if self.data["fx"] else "ВЫКЛ"), 20)
 
-    def make_tiles(self, pw, ph):
-        """Фрагменты картинки: каждый стартует из случайной точки экрана и с задержкой «волной» от центра."""
-        tiles = []
-        cx, cy = pw / 2, ph / 2
-        for ty in range(0, ph, TILE):
-            for tx in range(0, pw, TILE):
-                dist = math.hypot(tx - cx, (ty - cy) * 2) / math.hypot(cx, cy * 2)
-                tiles.append({"x": tx, "y": ty,
-                              "sx": random.uniform(-40, pw + 40), "sy": random.uniform(-30, ph + 30),
-                              "delay": dist * 0.8 + random.uniform(0, 0.35)})
-        return tiles
+    def frames_of(self, name):
+        if name not in self.screen_frames:
+            folder = os.path.join(SCREEN_DIR, name)
+            files = sorted(os.listdir(folder))
+            self.screen_frames[name] = {
+                kind: [tk.PhotoImage(file=os.path.join(folder, fn)) for fn in files if fn.startswith(kind)]
+                for kind in ("in_", "breath_")}
+        return self.screen_frames[name]
 
     def next_screen(self):
         """Следующая заставка (сама — раз в SCREEN_SEC, или щелчок по экрану с картинкой)."""
-        names = [n for n, _ in SCREENS if n == "eye" or n in self.screen_src]
+        names = self.screen_names
         cur = SCREENS[self.screen_i][0]
         nxt = names[(names.index(cur) + 1) % len(names)] if cur in names else names[0]
         self.screen_i = [n for n, _ in SCREENS].index(nxt)
         self.screen_since = time.time()
-        self.tiles = None
 
     def draw_screen(self, name, label, f):
-        """Картинка-заставка собирается из своих фрагментов, «дышит» и перед сменой рассыпается."""
+        """Заставка: точки загораются каждая в свой момент, потом вся картинка «дышит» — каждая точка
+        мерцает в своей фазе; перед сменой точки гаснут в обратном порядке."""
         x1, y1, x2, y2 = EYE_PANEL
-        src, img, settled = self.screen_src[name], self.screen_img, self.screen_settled
-        pw, ph = img.width(), img.height()
-        top = min(SCREEN_TOP.get(name, 0), max(0, src.height() - ph))
+        frames = self.frames_of(name)
+        appear, breath = frames["in_"], frames["breath_"]
         t = time.time() - self.screen_since
-        if self.tiles is None:
-            self.tiles = self.make_tiles(pw, ph)
-            settled.blank()
-        cmds = []   # все копирования кадра — одной пачкой команд Tcl (тысяча фрагментов за один вызов)
-
-        def copy(tx, ty, dx, dy):
-            dx, dy = int(dx), int(dy)
-            fx, fy = tx + max(0, -dx), ty + max(0, -dy)   # часть фрагмента за краем экрана отрезаем
-            if fx >= tx + TILE or fy >= ty + TILE or dx >= pw or dy >= ph:
-                return
-            cmds.append(f"{img} copy {src} -from {fx} {top + fy} {tx + TILE} {top + ty + TILE} "
-                        f"-to {max(0, dx)} {max(0, dy)}")
-        ease = lambda k: 1 - (1 - k) ** 3
-        leaving = t > SCREEN_SEC - SCATTER
-        if t < ASSEMBLE + 0.8 or leaving:
-            # сборка: фрагменты слетаются на место; рассыпание — разлетаются обратно
-            fixed = []
-            for tl in self.tiles:
-                if leaving:
-                    k = 1 - ease(min(1.0, max(0.0, (t - (SCREEN_SEC - SCATTER)) / SCATTER - tl["delay"] * 0.3)))
-                    if k < 1 and tl.get("set"):   # фрагмент сорвался с места — убрать его из готовой части
-                        tl["set"] = False
-                        fixed.append(f"{settled} put {G['bg']} -to {tl['x']} {tl['y']} {tl['x'] + TILE} {tl['y'] + TILE}")
-                else:
-                    k = ease(min(1.0, max(0.0, (t - tl["delay"]) / (ASSEMBLE - 0.8))))
-                    if k >= 1 and not tl.get("set"):   # долетел — впечатываем в готовую часть один раз
-                        tl["set"] = True
-                        fixed.append(f"{settled} copy {src} -from {tl['x']} {top + tl['y']} {tl['x'] + TILE} "
-                                     f"{top + tl['y'] + TILE} -to {tl['x']} {tl['y']}")
-                if k <= 0 or tl.get("set"):
-                    continue
-                copy(tl["x"], tl["y"], tl["sx"] + (tl["x"] - tl["sx"]) * k, tl["sy"] + (tl["y"] - tl["sy"]) * k)
-            if fixed:
-                img.tk.eval("\n".join(fixed))
-            cmds.insert(0, f"{img} blank\n{img} copy {settled}")
-        else:
-            # собранный кадр «дышит»: несколько фрагментов отрываются, сдвигаются и защёлкиваются обратно
-            img.tk.call(img, "copy", src, "-from", 0, top, pw, top + ph, "-to", 0, 0)
-            rnd = random.Random(int(t * 2.5))
-            for _ in range(14):
-                tl = rnd.choice(self.tiles)
-                phase = (t * 2.5) % 1
-                lift = math.sin(phase * math.pi)
-                dx = rnd.choice((-1, 1)) * rnd.randint(3, 10) * lift
-                dy = rnd.choice((-1, 1)) * rnd.randint(2, 6) * lift
-                cmds.append(f"{img} put {G['bg']} -to {tl['x']} {tl['y']} {min(pw, tl['x'] + TILE)} "
-                            f"{min(ph, tl['y'] + TILE)}")
-                copy(tl["x"], tl["y"], max(0, min(pw - TILE, tl["x"] + dx)), max(0, min(ph - TILE, tl["y"] + dy)))
-        if cmds:
-            img.tk.eval("\n".join(cmds))
+        if t > SCREEN_SEC - SCREEN_OUT:     # исчезновение — появление наоборот
+            k = (SCREEN_SEC - t) / SCREEN_OUT
+            img = appear[max(0, min(len(appear) - 1, int(k * len(appear))))]
+        elif t < SCREEN_IN:                  # появление
+            img = appear[min(len(appear) - 1, int(t / SCREEN_IN * len(appear)))]
+        else:                                # «дыхание» по кругу
+            img = breath[(f // BREATH_TICKS) % len(breath)]
         self.rect(x1, y1, x2, y2, G["bg"])
         self.cv.create_image(x1 + 1, y1 + 1, image=img, anchor="nw", tags=self.layer)
-        sy = y1 + 1 + (f * 5) % ph   # бегущая полоса развёртки, как на ЭЛТ
+        sy = y1 + 1 + (f * 5) % img.height()   # бегущая полоса развёртки, как на ЭЛТ
         self.cv.create_rectangle(x1 + 1, sy, x2 - 1, sy + 3, fill=G["bright"], outline="", stipple="gray25",
                                  tags=self.layer)
         for x in range(x1, x2, 6):   # пунктирная рамка, как у глаза
@@ -344,7 +292,7 @@ class AppTerminal(tq.App2):
         if time.time() - self.screen_since > SCREEN_SEC:
             self.next_screen()
         name, label = SCREENS[self.screen_i]
-        if name == "eye" or name not in self.screen_src:
+        if name == "eye" or name not in self.screen_names:
             self.draw_eye(running, f, glitch)
         else:
             self.draw_screen(name, label, f)

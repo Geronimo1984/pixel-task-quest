@@ -1,8 +1,11 @@
-"""Готовит заставки Terminal: картинка → палитра фосфорного экрана скина, с фактурой ЭЛТ.
+"""Готовит заставки Terminal: кадры анимации в палитре фосфорного экрана скина, с фактурой ЭЛТ.
 
 Яркость каждой точки (после растяжения контраста) переводится в зелёную шкалу скина
 (чёрный → glow → dim → mid → bright → hot), поверх — вертикальные штрихи и строки развёртки,
-как у большого таймера Terminal. Исходники лежат в tools/term_src, результат — assets/term_screens.
+как у большого таймера Terminal. Для каждой заставки готовятся кадры:
+  in_NN.png     — появление: каждая точка загорается в свой момент с короткой вспышкой;
+  breath_NN.png — «дыхание»: каждая точка плавно мерцает в своей фазе (кадры по кругу).
+Исходники лежат в tools/term_src, результат — assets/term_screens/<имя>/.
 
 Запуск:  python3 tools/bake_term_screens.py
 """
@@ -14,7 +17,11 @@ import tkinter as tk
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(HERE, "tools", "term_src")
 OUT = os.path.join(HERE, "assets", "term_screens")
-WIDTH = 384   # ширина окна экрана Terminal (без рамки)
+WIDTH, HEIGHT = 384, 176   # окно экрана Terminal (без рамки)
+TOP = {"rain": 16, "neo": 18, "bullets": 40}   # какая часть картинки в кадре (отступ сверху, px)
+IN_FRAMES, BREATH_FRAMES = 12, 12
+BREATH = 0.18          # размах «дыхания» яркости точки
+FLASH = 0.18           # длительность вспышки точки при появлении (доля появления)
 
 # шкала фосфора скина Terminal (task_quest_terminal.G): положение 0..1 → цвет
 RAMP = [(0.00, "#000000"), (0.18, "#0a3d1a"), (0.42, "#11702f"), (0.66, "#1fae48"), (0.86, "#39ff6a"),
@@ -52,33 +59,66 @@ def prepare(name, tmp, root):
 
 
 def bake(name, root):
+    import math
+    import random
     tmp = os.path.join(OUT, f".{name}_src.png")
     prepare(name, tmp, root)
     src = tk.PhotoImage(master=root, file=tmp)
-    w, h = src.width(), src.height()
+    w, h = WIDTH, HEIGHT
+    top = min(TOP.get(name, 0), max(0, src.height() - h))
     lum = [[0.0] * w for _ in range(h)]
     hist = []
     for y in range(h):
         for x in range(w):
-            r, g, b = src.get(x, y)
+            r, g, b = src.get(x, top + y)
             v = 0.3 * r + 0.59 * g + 0.11 * b
             lum[y][x] = v
             hist.append(v)
+    os.remove(tmp)
     hist.sort()
     lo, hi = hist[int(len(hist) * 0.02)], hist[int(len(hist) * 0.995)]   # растяжение контраста
-    out = tk.PhotoImage(master=root, width=w, height=h)
+    rnd = random.Random(name)
+    base = [[0.0] * w for _ in range(h)]
+    phase = [[0.0] * w for _ in range(h)]
+    appear = [[0.0] * w for _ in range(h)]
     for y in range(h):
-        row = []
         scan = 0.78 if y % 3 == 2 else 1.0                       # строки развёртки
         for x in range(w):
-            v = max(0.0, min(1.0, (lum[y][x] - lo) / max(1.0, hi - lo)))
-            v = v ** 0.85
+            v = max(0.0, min(1.0, (lum[y][x] - lo) / max(1.0, hi - lo))) ** 0.85
             stroke = 0.62 if x % 3 == 2 else 1.0                  # вертикальные штрихи фосфора
-            r, g, b = ramp(v * stroke * scan)
-            row.append(f"#{r:02x}{g:02x}{b:02x}")
-        out.put("{" + " ".join(row) + "}", to=(0, y))
-    out.write(os.path.join(OUT, f"{name}.png"), format="png")
-    os.remove(tmp)
+            base[y][x] = v * stroke * scan
+            phase[y][x] = rnd.random()
+            appear[y][x] = rnd.random() * (1 - FLASH)             # момент, когда точка загорится
+    lut = [ramp(i / 255) for i in range(256)]
+    hexes = ["#%02x%02x%02x" % c for c in lut]
+    folder = os.path.join(OUT, name)
+    os.makedirs(folder, exist_ok=True)
+    for old in os.listdir(folder):
+        os.remove(os.path.join(folder, old))
+
+    def write(fname, value):
+        img = tk.PhotoImage(master=root, width=w, height=h)
+        for y in range(h):
+            img.put("{" + " ".join(hexes[max(0, min(255, int(value(x, y) * 255)))] for x in range(w)) + "}",
+                    to=(0, y))
+        img.write(os.path.join(folder, fname), format="png")
+
+    for k in range(IN_FRAMES):
+        t = (k + 1) / IN_FRAMES
+
+        def value(x, y, t=t):
+            dt = t - appear[y][x]
+            if dt < 0:
+                return 0.0
+            flash = max(0.0, 1 - dt / FLASH) * 0.55             # вспышка при загорании точки
+            return base[y][x] + flash
+        write(f"in_{k:02d}.png", value)
+    for k in range(BREATH_FRAMES):
+        t = k / BREATH_FRAMES
+
+        def value(x, y, t=t):
+            return base[y][x] * (1 + BREATH * math.sin(2 * math.pi * (t + phase[y][x])))
+        write(f"breath_{k:02d}.png", value)
     return w, h
 
 
