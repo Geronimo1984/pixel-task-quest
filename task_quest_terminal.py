@@ -46,10 +46,11 @@ SCREEN_IN = 1.6       # секунд на появление (точки заг�
 SCREEN_OUT = 1.0      # секунд на исчезновение перед сменой заставки
 # заставка рисуется из исходника символами шрифта скина: плотность символа — яркость картинки
 ASCII_FONT = 4                                   # Menlo 4: клетка 2×5 px → 192×35 символов в окне
-ASCII_LEVELS = [" ", ".,", "`'", ":;", "-~", "=+", "<>", "*x", "#%", "&8", "@$"]   # 0 — пусто … 10 — ярко
+# 0 — пусто … 10 — ярко; яркие уровни — символы-заливки ░▒▓█: закрашивают клетку целиком и светятся,
+# как точки глаза (тонкие символы при клетке 2×5 px почти не дают света)
+ASCII_LEVELS = [" ", ".,", ":;", "-~", "=+", "*x", "░#", "░▒", "▒▓", "▓▓", "██"]
 ASCII_SCRAMBLE = "01<>/\\|=+*#ABCDEFXZ$%"
-ASCII_TIERS = [(range(1, 3), "glow"), (range(3, 5), "dim"), (range(5, 7), "mid"), (range(7, 9), "bright"),
-               (range(9, 11), "hot")]
+ASCII_TIERS = [(range(1, 3), "dim"), (range(3, 6), "mid"), (range(6, 8), "bright"), (range(8, 11), "hot")]
 
 
 def eye_halfheight(dx):
@@ -173,7 +174,7 @@ class AppTerminal(tq.App2):
 
     def ascii_start(self, name):
         """Сетка заставки из исходника: уровень плотности каждой клетки и момент её «расшифровки»."""
-        font = tkfont.Font(family=self.font(ASCII_FONT)[0], size=ASCII_FONT)
+        font = tkfont.Font(family=self.font(ASCII_FONT)[0], size=ASCII_FONT, weight="bold")
         cw, lh = font.measure("M"), font.metrics("linespace")
         x1, y1, x2, y2 = EYE_PANEL
         cols, rows = (x2 - x1 - 4) // cw, (y2 - y1 - 4) // lh
@@ -191,8 +192,8 @@ class AppTerminal(tq.App2):
         lo, hi = flat[int(len(flat) * 0.03)], flat[int(len(flat) * 0.995)]   # растяжение контраста
         norm = lambda v: max(0.0, min(1.0, (v - lo) / max(1.0, hi - lo)))
         # контраст сильнее (тёмное темнее), самый тёмный фон — пустые клетки без мелкого мусора
-        levels = [[0 if norm(v) < 0.24 else max(1, round(norm(v) ** 1.5 * 10)) for v in row] for row in lum]
-        self.ascii = {"name": name, "font": (self.font(ASCII_FONT)[0], ASCII_FONT), "cw": cw, "lh": lh,
+        levels = [[0 if norm(v) < 0.24 else max(1, round(norm(v) ** 1.1 * 10)) for v in row] for row in lum]
+        self.ascii = {"name": name, "font": (self.font(ASCII_FONT)[0], ASCII_FONT, "bold"), "cw": cw, "lh": lh,
                       "levels": levels,
                       "decode": [[(r / rows) * 0.45 + random.uniform(0, 0.55) for _ in range(cols)] for r in range(rows)],
                       "var": [[random.randrange(2) for _ in range(cols)] for _ in range(rows)]}
