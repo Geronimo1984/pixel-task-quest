@@ -8,6 +8,7 @@
 Запуск:  python3 task_quest.py term
 """
 import math
+import os
 import random
 import time
 import tkinter as tk
@@ -34,6 +35,13 @@ DAY_GOAL_SEC = 8 * 3600
 # ── Полутоновый глаз ────────────────────────────────────────────────────────
 EYE_CX, EYE_CY, EYE_HW, EYE_HH, EYE_STEP = 277, 178, 176, 64, 7
 EYE_PANEL = (84, 82, 470, 262)
+
+# Заставки в окне экрана: глаз и картинки из assets/term_screens, сменяются раз в SCREEN_SEC или по щелчку
+SCREEN_DIR = os.path.join(pt.APP_DIR, "assets", "term_screens")
+SCREENS = [("eye", "WATCHING YOUR TIME"), ("rain", "THE RAIN PRESENTS"), ("neo", "WAKE UP, NEO..."),
+           ("bullets", "THERE IS NO SPOON")]
+SCREEN_SEC = 20
+SCREEN_REVEAL = 1.4   # секунд на построчное проявление
 
 
 def eye_halfheight(dx):
@@ -90,6 +98,15 @@ class AppTerminal(tq.App2):
         self.topmost = False
         self.idle_since = time.time()
         self.glitch_until = -1
+        self.screen_i = 0
+        self.screen_since = time.time()
+        self.screen_src = {}
+        for name, _ in SCREENS[1:]:
+            path = os.path.join(SCREEN_DIR, f"{name}.png")
+            if os.path.exists(path):
+                self.screen_src[name] = tk.PhotoImage(file=path)
+        x1, y1, x2, y2 = EYE_PANEL
+        self.screen_img = tk.PhotoImage(width=x2 - x1 - 2, height=y2 - y1 - 2)
         self.typed = ("", 0)
         self.rain = [pt.App.new_drop(x, random.uniform(-H, H)) for x in range(90, W, 14)]
         self.rain_colors = [G["rain_head"]] + [mix(G["rain_tail"], G["bg"], 0.6 * k / RAIN_TRAIL)
@@ -146,6 +163,48 @@ class AppTerminal(tq.App2):
         self.data["fx"] = not self.data["fx"]
         self.save()
         self.show_toast("Падающие символы: " + ("ВКЛ" if self.data["fx"] else "ВЫКЛ"), 20)
+
+    def next_screen(self):
+        """Следующая заставка (сама — раз в SCREEN_SEC, или щелчок по экрану с картинкой)."""
+        names = [n for n, _ in SCREENS if n == "eye" or n in self.screen_src]
+        cur = SCREENS[self.screen_i][0]
+        nxt = names[(names.index(cur) + 1) % len(names)] if cur in names else names[0]
+        self.screen_i = [n for n, _ in SCREENS].index(nxt)
+        self.screen_since = time.time()
+
+    def draw_screen(self, name, label, f):
+        """Картинка-заставка: проявляется построчно, медленно плывёт, по ней бежит развёртка и изредка глитч."""
+        x1, y1, x2, y2 = EYE_PANEL
+        src, img = self.screen_src[name], self.screen_img
+        pw, ph = img.width(), img.height()
+        t = time.time() - self.screen_since
+        # медленный «проезд» камеры по картинке туда и обратно
+        span = max(0, src.height() - ph)
+        off = int(span * (0.5 - 0.5 * math.cos(math.pi * min(1.0, t / SCREEN_SEC) * 2))) if span else 0
+        img.tk.call(img, "copy", src, "-from", 0, off, pw, off + ph, "-to", 0, 0)
+        if random.random() < 0.06:   # глитч: полоска картинки съезжает вбок
+            gy = random.randint(0, ph - 12)
+            gh = random.randint(4, 12)
+            dx = random.choice((-14, -8, 8, 14))
+            img.tk.call(img, "copy", src, "-from", max(0, -dx), off + gy, pw - max(0, dx), off + gy + gh,
+                        "-to", max(0, dx), gy)
+        self.rect(x1, y1, x2, y2, G["bg"])
+        self.cv.create_image(x1 + 1, y1 + 1, image=img, anchor="nw", tags=self.layer)
+        reveal = min(1.0, t / SCREEN_REVEAL)
+        if reveal < 1:   # построчное проявление сверху вниз с яркой полосой развёртки
+            ry = y1 + 1 + int(ph * reveal)
+            self.rect(x1 + 1, ry, x2 - 1, y2 - 1, G["bg"])
+            self.rect(x1 + 1, ry - 2, x2 - 1, ry + 1, G["hot"])
+        else:            # бегущая полоса развёртки, как на ЭЛТ
+            sy = y1 + 1 + (f * 5) % ph
+            self.cv.create_rectangle(x1 + 1, sy, x2 - 1, sy + 3, fill=G["bright"], outline="", stipple="gray25",
+                                     tags=self.layer)
+        for x in range(x1, x2, 6):   # пунктирная рамка, как у глаза
+            self.rect(x, y1, x + 3, y1 + 1, G["mid"])
+            self.rect(x, y2 - 1, x + 3, y2, G["mid"])
+        self.gtext(x1 + 4, y1 + 12, label, G["bright"], 10)
+        self.gtext(x2 - 6, y1 + 12, f"[{self.screen_i + 1}/{len(SCREENS)}]", G["mid"], 9, anchor="e")
+        self.hits.append((x1, y1, x2, y2, self.next_screen))
 
     def poke_eye(self):
         """Пасхалка: ткнуть в глаз — экран глючит."""
@@ -227,7 +286,13 @@ class AppTerminal(tq.App2):
             self.draw_rain(running)
         self.draw_day_bar(today, f)
         self.draw_prompt(running, sel, f, glitch)
-        self.draw_eye(running, f, glitch)
+        if time.time() - self.screen_since > SCREEN_SEC:
+            self.next_screen()
+        name, label = SCREENS[self.screen_i]
+        if name == "eye" or name not in self.screen_src:
+            self.draw_eye(running, f, glitch)
+        else:
+            self.draw_screen(name, label, f)
 
         # большой таймер — общее время за день
         total = self.task_total(sel["id"]) if sel else 0
