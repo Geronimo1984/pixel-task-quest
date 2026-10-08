@@ -42,6 +42,9 @@ DISC_TITLES = {   # assets/discs/<имя>.png → название
     "sh2": "Silent Hill 2", "matrix": "Matrix: Path of Neo", "re4ps3": "Resident Evil 4 PS3",
     "manhunt": "Manhunt", "mk": "MK: Deception", "sonicadv": "Sonic Adventure",
     "outlast": "Outlast Trinity", "sims2": "The Sims 2", "sh3": "Silent Hill 3",
+    "twistedmetal": "Twisted Metal", "alice": "American McGee's Alice", "obscure": "ObsCure",
+    "reoutbreak": "Resident Evil Outbreak", "hellokitty": "Hello Kitty Roller Rescue", "re4pc": "Resident Evil 4 PC",
+    "bratzps2": "Bratz Rock Angelz PS2", "dmc4": "Devil May Cry 4",
 }
 DISCS = list(DISC_TITLES)
 DISC_CENTER, DISC_SIZE, DISC_FRAMES = (222, 220), 420, 48   # центр и диаметр диска, кадров на оборот (по 7,5°)
