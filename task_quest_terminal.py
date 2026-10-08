@@ -49,10 +49,6 @@ ASCII_FONT = 4                                   # Menlo 4: клетка 2×5 px
 # 0 — пусто … 10 — ярко; яркие уровни — символы-заливки ░▒▓█: закрашивают клетку целиком и светятся,
 # как точки глаза (тонкие символы при клетке 2×5 px почти не дают света)
 ASCII_LEVELS = [" ", ".,", ":;", "-~", "=+", "*x", "░#", "░▒", "▒▓", "▓▓", "██"]
-# символы-четвертинки: клетка с краем рисуется формой (какие из 4 четвертей светлые), а не одним пятном
-# биты: 1 — левая верхняя, 2 — правая верхняя, 4 — левая нижняя, 8 — правая нижняя
-ASCII_QUADS = " ▘▝▀▖▌▞▛▗▚▐▜▄▙▟█"
-ASCII_EDGE = 0.22     # разница яркости четвертей, начиная с которой клетка рисуется формой
 ASCII_SCRAMBLE = "01<>/\\|=+*#ABCDEFXZ$%"
 ASCII_TIERS = [(range(1, 3), "dim"), (range(3, 6), "mid"), (range(6, 8), "bright"), (range(8, 11), "hot")]
 
@@ -183,45 +179,22 @@ class AppTerminal(tq.App2):
         x1, y1, x2, y2 = EYE_PANEL
         cols, rows = (x2 - x1 - 4) // cw, (y2 - y1 - 4) // lh
         src = tk.PhotoImage(file=os.path.join(SCREEN_DIR, f"{name}.png"))
-        # все пиксели одним вызовом (по одному — в сотни раз дольше)
-        rows_px = src.tk.splitlist(src.tk.call(src, "data"))
-        pix = []
-        for line in rows_px:
+        lum = []
+        for r in range(rows):
             row = []
-            for h in src.tk.splitlist(line):
-                row.append(0.3 * int(h[1:3], 16) + 0.59 * int(h[3:5], 16) + 0.11 * int(h[5:7], 16))
-            pix.append(row)
-        H, W = len(pix), len(pix[0])
-        flat = sorted(v for row in pix for v in row)
+            for c in range(cols):
+                px, py = c * src.width() // cols, r * src.height() // rows
+                pts = [src.get(min(src.width() - 1, px + dx), min(src.height() - 1, py + dy))
+                       for dx in range(cw) for dy in range(0, lh, 2)]
+                row.append(sum(0.3 * p[0] + 0.59 * p[1] + 0.11 * p[2] for p in pts) / len(pts))
+            lum.append(row)
+        flat = sorted(v for row in lum for v in row)
         lo, hi = flat[int(len(flat) * 0.03)], flat[int(len(flat) * 0.995)]   # растяжение контраста
         norm = lambda v: max(0.0, min(1.0, (v - lo) / max(1.0, hi - lo)))
-
-        def avg(xa, xb, ya, yb):
-            vals = [pix[min(H - 1, y)][min(W - 1, x)] for y in range(ya, max(ya + 1, yb)) for x in range(xa, max(xa + 1, xb))]
-            return norm(sum(vals) / len(vals))
-
-        levels, quads = [], []
-        level = lambda v: 0 if v < 0.24 else max(1, round(v ** 1.1 * 10))   # тёмный фон — пустые клетки
-        for r in range(rows):
-            lrow, qrow = [], []
-            for c in range(cols):
-                x0, y0 = c * W // cols, r * H // rows
-                x1_, y1_ = (c + 1) * W // cols, (r + 1) * H // rows
-                xm, ym = (x0 + x1_) // 2, (y0 + y1_) // 2
-                sub = [avg(x0, xm, y0, ym), avg(xm, x1_, y0, ym), avg(x0, xm, ym, y1_), avg(xm, x1_, ym, y1_)]
-                if max(sub) - min(sub) >= ASCII_EDGE:   # край: рисуем формой — светлые четверти
-                    cut = (max(sub) + min(sub)) / 2
-                    bits = sum(1 << i for i, v in enumerate(sub) if v > cut)
-                    lit = [v for v in sub if v > cut]
-                    lrow.append(max(1, level(sum(lit) / len(lit))))
-                    qrow.append(ASCII_QUADS[bits])
-                else:                                   # ровный участок: символ плотности
-                    lrow.append(level(sum(sub) / 4))
-                    qrow.append(None)
-            levels.append(lrow)
-            quads.append(qrow)
+        # контраст сильнее (тёмное темнее), самый тёмный фон — пустые клетки без мелкого мусора
+        levels = [[0 if norm(v) < 0.24 else max(1, round(norm(v) ** 1.1 * 10)) for v in row] for row in lum]
         self.ascii = {"name": name, "font": (self.font(ASCII_FONT)[0], ASCII_FONT, "bold"), "cw": cw, "lh": lh,
-                      "levels": levels, "quads": quads,
+                      "levels": levels,
                       "decode": [[(r / rows) * 0.45 + random.uniform(0, 0.55) for _ in range(cols)] for r in range(rows)],
                       "var": [[random.randrange(2) for _ in range(cols)] for _ in range(rows)]}
 
@@ -229,7 +202,7 @@ class AppTerminal(tq.App2):
         """Строки заставки по цветам фосфора: каждая клетка — символ своей плотности; появление «расшифровкой»,
         потом диагональная волна света и перемигивание символов, перед сменой — расшифровка наоборот."""
         a = self.ascii
-        levels, decode, var, quads = a["levels"], a["decode"], a["var"], a["quads"]
+        levels, decode, var = a["levels"], a["decode"], a["var"]
         rows, cols = len(levels), len(levels[0])
         tiers = {tier: [[" "] * cols for _ in range(rows)] for _, tier in ASCII_TIERS}
         tier_of = {lvl: tier for rng, tier in ASCII_TIERS for lvl in rng}
@@ -253,16 +226,13 @@ class AppTerminal(tq.App2):
                         continue
                     if t < when + 0.14:          # вспышка в момент, когда клетка встала на место
                         if lvl:
-                            tiers["hot"][r][c] = quads[r][c] or ASCII_LEVELS[lvl][var[r][c]]
+                            tiers["hot"][r][c] = ASCII_LEVELS[lvl][var[r][c]]
                         continue
                 if not lvl:
                     continue
                 # «дыхание»: диагональная волна света и редкое перемигивание символов той же плотности
                 wave = math.sin(2 * math.pi * wave_t - (c * 0.07 + r * 0.22))
                 cur = max(1, min(10, lvl + round(wave * 1.3)))
-                if quads[r][c]:                  # край: форма та же, «дышит» только свечение
-                    tiers[tier_of[cur]][r][c] = quads[r][c]
-                    continue
                 if random.random() < 0.015:
                     var[r][c] = 1 - var[r][c]
                 tiers[tier_of[cur]][r][c] = ASCII_LEVELS[cur][var[r][c]]
