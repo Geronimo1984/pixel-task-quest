@@ -637,6 +637,7 @@ class AppMD(tq.App2):
     KB_AREA = (16, 572, 464, 722)
     KB_TABS = (464, 550, 568, 80)
     KB_SKIN = "md"
+    DONE_ANIM = True   # «Готово» — крутящийся диск Kirby Air Ride в правом нижнем углу
 
     def kb_theme(self):
         return {"cols": {"todo": C["cyan_dim"], "doing": C["run"], "done": "#7de8a8"}, "col_bg": C["panel"],

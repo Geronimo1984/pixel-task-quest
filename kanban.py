@@ -247,7 +247,8 @@ class KanbanMixin:
             if r and r["task_id"] == tid:
                 self.stop()   # готово — таймер останавливается, время сохраняется
             self.kb_done_fx()
-            self.play_done_anim()   # анимация «Готово» в правом нижнем углу
+            if self.DONE_ANIM:
+                self.play_done_anim()   # анимация «Готово» в правом нижнем углу (только в MiniDisc)
             self.show_toast(f"Готово: {t['name'][:22]} ★", 30)
         else:
             self.show_toast(f"{dict(STATUSES)[status].capitalize()}: {t['name'][:22]}", 22)
@@ -256,6 +257,7 @@ class KanbanMixin:
     # ── анимация «Готово»: диск Kirby Air Ride в правом нижнем углу (assets/done_kirby, 30 кадров по 100 мс) ──
     DONE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "done_kirby")
     DONE_MS = 100
+    DONE_ANIM = False   # включается скином (сейчас — только MiniDisc)
 
     def done_frames(self):
         """Кадры загружаются один раз на окно (картинки Tk живут вместе со своим окном)."""
