@@ -7,6 +7,8 @@
   kb_theme() — цвета и шрифт (см. THEME_KEYS).
 В redraw скин рисует вкладки (draw_view_tabs) и, если включён канбан (kb_on()), — draw_kanban вместо списка.
 """
+import os
+import tkinter as tk
 from tkinter import font as tkfont
 
 from pixel_tracker import fmt_hms, mix
@@ -222,6 +224,8 @@ class KanbanMixin:
         super().tick()
         if self.kb_drag and self.kb_drag.get("active"):
             self.cv.tag_raise("kbghost")   # призрак всегда поверх свежего кадра
+        if self.cv.find_withtag("doneanim"):
+            self.cv.tag_raise("doneanim")
 
     def on_wheel(self, e):
         x1, y1, x2, y2 = self.KB_AREA
@@ -243,10 +247,56 @@ class KanbanMixin:
             if r and r["task_id"] == tid:
                 self.stop()   # готово — таймер останавливается, время сохраняется
             self.kb_done_fx()
+            self.play_done_anim()   # анимация «Готово» в правом нижнем углу
             self.show_toast(f"Готово: {t['name'][:22]} ★", 30)
         else:
             self.show_toast(f"{dict(STATUSES)[status].capitalize()}: {t['name'][:22]}", 22)
         self.save()
+
+    # ── анимация «Готово»: диск Kirby Air Ride в правом нижнем углу (assets/done_kirby, 30 кадров по 100 мс) ──
+    DONE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "done_kirby")
+    DONE_MS = 100
+
+    def done_frames(self):
+        """Кадры загружаются один раз на окно (картинки Tk живут вместе со своим окном)."""
+        frames = getattr(self.root, "_done_frames", None)
+        if frames is None:
+            frames = []
+            i = 0
+            while os.path.exists(os.path.join(self.DONE_DIR, f"{i}.png")):
+                frames.append(tk.PhotoImage(master=self.root, file=os.path.join(self.DONE_DIR, f"{i}.png")))
+                i += 1
+            self.root._done_frames = frames
+        return frames
+
+    def play_done_anim(self):
+        """Проигрывает анимацию один раз поверх скина; повторное «Готово» начинает её заново."""
+        try:
+            frames = self.done_frames()
+        except tk.TclError:
+            return
+        if not frames:
+            return
+        if getattr(self, "_done_after", None):
+            self.root.after_cancel(self._done_after)
+        self.cv.delete("doneanim")
+        w, h = frames[0].width(), frames[0].height()
+        x = int(self.cv["width"]) - w - 6
+        y = int(self.cv["height"]) - h - 6
+        item = self.cv.create_image(x, y, image=frames[0], anchor="nw", tags="doneanim")
+
+        def step(k=1):
+            self._done_after = None
+            if not self.cv.winfo_exists():
+                return
+            if k >= len(frames):
+                self.cv.delete("doneanim")
+                return
+            self.cv.itemconfigure(item, image=frames[k])
+            self.cv.tag_raise("doneanim")   # поверх свежего кадра скина
+            self._done_after = self.root.after(self.DONE_MS, lambda: step(k + 1))
+        self.cv.tag_raise("doneanim")
+        self._done_after = self.root.after(self.DONE_MS, step)
 
     def kb_done_fx(self):
         x1, y1, x2, y2 = self.KB_AREA
@@ -293,6 +343,9 @@ class KanbanMixin:
             self.overlay_changed(False)
 
     def teardown(self):
+        if getattr(self, "_done_after", None):
+            self.root.after_cancel(self._done_after)
+            self._done_after = None
         if self.details:
             self.details.close()
         super().teardown()
