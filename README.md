@@ -14,6 +14,14 @@
   <img src="docs/screenshot_md.png" width="200" alt="Скин MiniDisc">
 </p>
 
+<p align="center">
+  <img src="docs/screenshot_moon_kanban.png" width="200" alt="Moon: канбан">
+  <img src="docs/screenshot_2000_kanban.png" width="200" alt="2000: канбан">
+  <img src="docs/screenshot_terminal_kanban.png" width="200" alt="Terminal: канбан">
+  <img src="docs/screenshot_md_kanban.png" width="200" alt="MiniDisc: канбан">
+</p>
+<p align="center"><sub>Сверху — режим «Список», снизу — «Канбан» (демо-данные)</sub></p>
+
 ## Возможности
 
 - **Старт / стоп** одной кнопкой или **пробелом**
