@@ -58,6 +58,42 @@ def _url(path):
     return CFURLCreateFromFileSystemRepresentation(None, b, len(b), False)
 
 
+def render_frame(src, out_path, size, angle):
+    """Один кадр диска, повернутого на angle радиан (отрицательный угол — по часовой стрелке)."""
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    src_url = _url(src)
+    source = CGImageSourceCreateWithURL(src_url, None)
+    image = CGImageSourceCreateImageAtIndex(source, 0, None) if source else None
+    if not image:
+        raise OSError(f"не удалось прочитать {src}")
+    space = CGColorSpaceCreateDeviceRGB()
+    png = CFStringCreateWithCString(None, b"public.png", _UTF8)
+    s = float(size)
+    try:
+        ctx = CGBitmapContextCreate(None, size, size, 8, 0, space, _PREMULT_LAST)
+        CGContextSetInterpolationQuality(ctx, _HIGH_QUALITY)
+        CGContextAddEllipseInRect(ctx, CGRect(0.5, 0.5, s - 1, s - 1))   # круг диска
+        CGContextClip(ctx)
+        CGContextTranslateCTM(ctx, s / 2, s / 2)
+        CGContextRotateCTM(ctx, angle)
+        CGContextDrawImage(ctx, CGRect(-s / 2, -s / 2, s, s), image)
+        frame = CGBitmapContextCreateImage(ctx)
+        out_url = _url(out_path)
+        dest = CGImageDestinationCreateWithURL(out_url, png, 1, None)
+        CGImageDestinationAddImage(dest, frame, None)
+        CGImageDestinationFinalize(dest)
+        for obj in (dest, out_url):
+            CFRelease(obj)
+        CGImageRelease(frame)
+        CGContextRelease(ctx)
+    finally:
+        CFRelease(png)
+        CGColorSpaceRelease(space)
+        CGImageRelease(image)
+        CFRelease(source)
+        CFRelease(src_url)
+
+
 def render_frames(src, outdir, size, frames):
     os.makedirs(outdir, exist_ok=True)
     src_url = _url(src)

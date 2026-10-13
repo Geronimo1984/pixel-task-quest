@@ -351,10 +351,31 @@ class AppMD(tq.App2):
         return ox + DISC_CENTER[0] - DISC_SIZE // 2, oy + DISC_CENTER[1] - DISC_SIZE // 2
 
     def overlay_changed(self, shown):
-        """Панель выбора скина поверх окна: слой диска на это время прячем, чтобы он её не закрывал."""
+        """Панель поверх окна (выбор скина, карточка квеста, подтверждение): слой диска на это время прячем,
+        чтобы он её не закрывал, а на холсте вместо него — снимок диска в том же положении."""
         self.overlay_open = shown
-        if self.native:
-            self.native.set_hidden(shown)
+        if not self.native:
+            return
+        if shown:
+            self.show_disc_snapshot()
+            self.root.update_idletasks()   # снимок уже на холсте, когда слой исчезнет
+            self.native.set_hidden(True)
+        else:
+            self.native.set_hidden(False)
+            self.cv.itemconfigure(self.disc_item, image="")
+            self.disc_snapshot = None
+            self.keys.pop("disc", None)
+
+    def show_disc_snapshot(self):
+        """Неподвижный кадр текущего диска под углом слоя Core Animation — пока слой спрятан."""
+        try:
+            path = os.path.join(CACHE, "snapshot.png")
+            disc_render.render_frame(self.disc_path(self.current_disc()), path, DISC_SIZE, self.native.angle())
+            self.disc_snapshot = tk.PhotoImage(file=path)
+        except (OSError, tk.TclError, AttributeError, ValueError):
+            return
+        self.cv.itemconfigure(self.disc_item, image=self.disc_snapshot)
+        self.keys["disc"] = str(self.disc_snapshot)
 
     def spin(self):
         """Запускает цикл вращения, если он ещё не идёт."""

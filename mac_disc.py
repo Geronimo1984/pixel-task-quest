@@ -148,6 +148,12 @@ class NativeDisc:
             _send(self.disc, b"setTimeOffset:", None, (_D,), local - now * k)
         self.speed = k
 
+    def angle(self):
+        """Текущий угол поворота диска в радианах (как у анимации: по часовой стрелке — отрицательный)."""
+        local = _send(self.disc, b"convertTime:fromLayer:", _D, (_D, _V), _qc.CACurrentMediaTime(), None)
+        turns = ((local - 1.0) / self.period) % 1.0   # анимация началась в момент 1 по времени слоя
+        return -2 * math.pi * turns
+
     def set_hidden(self, hidden):
         with _Tx():
             _send(self.container, b"setHidden:", None, (_B,), hidden)
